@@ -93,8 +93,13 @@ echo "  OK"
 echo ""
 echo "[5/6] Setting up OpenClaw workspaces..."
 
-# Copy the main config
-cp "$RAILCLAW_DIR/openclaw.json" "$OPENCLAW_HOME/openclaw.json"
+# Copy the main config and substitute env vars with actual values
+# OpenClaw does NOT resolve ${VAR} from systemd env — tokens must be hardcoded
+sed \
+  -e "s|\${TELEGRAM_BOT_TOKEN_OWNER}|${TELEGRAM_BOT_TOKEN_OWNER}|g" \
+  -e "s|\${TELEGRAM_BOT_TOKEN_PRODUCT}|${TELEGRAM_BOT_TOKEN_PRODUCT}|g" \
+  "$RAILCLAW_DIR/openclaw.json" > "$OPENCLAW_HOME/openclaw.json"
+echo "  Config written with bot tokens substituted"
 
 # --- workspace-owner ---
 OWNER_WS="$OPENCLAW_HOME/workspace-owner"
@@ -148,7 +153,12 @@ echo "  Orchestrator workspace → $ORCH_WS"
 echo ""
 echo "[6/6] Installing systemd service..."
 
-# Build env file for systemd
+# Stop any existing OpenClaw daemon to avoid port conflicts
+openclaw gateway stop 2>/dev/null || true
+systemctl --user stop openclaw-gateway 2>/dev/null || true
+systemctl --user disable openclaw-gateway 2>/dev/null || true
+
+# Build env file for systemd (scripts still need env vars for RPC, encryption, etc.)
 ENV_FILE="$RAILCLAW_DIR/railclaw.env"
 cp "$RAILCLAW_DIR/.env" "$ENV_FILE"
 echo "" >> "$ENV_FILE"
@@ -156,6 +166,8 @@ echo "RAILCLAW_DATA_DIR=$RAILCLAW_DIR/shared/data" >> "$ENV_FILE"
 echo "RAILCLAW_SCRIPTS_DIR=$RAILCLAW_DIR/shared/scripts" >> "$ENV_FILE"
 
 # Single service — one OpenClaw instance, two agents
+# Note: Bot tokens are hardcoded in openclaw.json (not env vars)
+# EnvironmentFile is still needed for RPC endpoints, encryption keys, etc.
 sudo tee /etc/systemd/system/railclaw.service > /dev/null <<SERVICEEOF
 [Unit]
 Description=Railclaw (OpenClaw Gateway)
