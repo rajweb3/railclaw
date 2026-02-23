@@ -15,7 +15,7 @@
         id: "business-owner",
         name: "Railclaw Business",
         workspace: "~/.openclaw/workspace-owner",
-        subagents: { allowAgents: ["orchestrator"] }
+        subagents: { allowAgents: [] }
       },
       {
         id: "business-product",
@@ -89,7 +89,7 @@
     // Enable cross-agent communication (owner/product → orchestrator)
     agentToAgent: {
       enabled: true,
-      allow: ["business-owner", "business-product", "orchestrator"]
+      allow: ["business-product", "orchestrator"]
     },
     sessions: {
       visibility: "all"
