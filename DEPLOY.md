@@ -132,7 +132,9 @@ This creates:
 ## STEP 7: Onboard OpenClaw
 
 ```bash
-source ~/railclaw/.env
+# Export env vars (source alone doesn't export them)
+set -a && source ~/railclaw/.env && set +a
+
 openclaw onboard
 ```
 
@@ -202,8 +204,20 @@ cp -r ~/railclaw/shared/data/wallets/ ~/backup-wallets-$(date +%Y%m%d)/
 # Service not starting
 journalctl -u railclaw -n 50 --no-pager
 
+# Port conflict / "Gateway already running"
+# OpenClaw's own daemon may conflict with our systemd service. Disable it:
+openclaw gateway stop
+systemctl --user stop openclaw-gateway 2>/dev/null
+systemctl --user disable openclaw-gateway 2>/dev/null
+sudo systemctl restart railclaw
+
+# Telegram bots not connecting
+# Verify tokens are hardcoded (not ${VAR} placeholders) in the config:
+grep botToken ~/.openclaw/openclaw.json
+# If you still see ${TELEGRAM_BOT_TOKEN_...}, re-run setup.sh
+
 # Test scripts directly
-source ~/railclaw/.env
+set -a && source ~/railclaw/.env && set +a
 cd ~/railclaw/shared/scripts
 RAILCLAW_DATA_DIR=~/railclaw/shared/data npx tsx send-otp.ts --email "test@test.com"
 RAILCLAW_DATA_DIR=~/railclaw/shared/data npx tsx create-wallet.ts --email "test@test.com"
