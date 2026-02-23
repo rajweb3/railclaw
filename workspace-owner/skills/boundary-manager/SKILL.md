@@ -25,8 +25,8 @@ metadata: {}
 | `/boundary set-emi off` | Disable EMI |
 | `/boundary set-restriction <key> <val>` | Update restriction |
 
-Valid chains: `polygon`, `arbitrum`, `solana`, `ethereum`, `optimism`, `base`, `avalanche`, `bsc`
-Valid tokens: `USDC`, `USDT`, `ETH`, `DAI`, `WETH`, `WBTC`, `SOL`, `MATIC`
+Valid chains: `polygon`, `arbitrum`
+Valid tokens: `USDC`, `USDT`, `DAI`, `WETH`
 
 ## On Every Change
 1. Increment `version`
