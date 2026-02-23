@@ -22,7 +22,8 @@ echo "[1/6] Checking prerequisites..."
 NODE_VERSION=$(node --version 2>/dev/null || echo "none")
 if [[ "$NODE_VERSION" == "none" ]]; then
   echo "ERROR: Node.js not installed."
-  echo "  Run: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs"
+  echo "  For Amazon Linux: curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo yum install -y nodejs"
+  echo "  For Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs"
   exit 1
 fi
 

@@ -7,14 +7,14 @@ Single OpenClaw instance, three agents (including Service Orchestrator), two Tel
 ## STEP 1: Provision EC2
 
 1. AWS Console → EC2 → Launch Instance
-2. **AMI**: Ubuntu 22.04 LTS
+2. **AMI**: Amazon Linux 2023
 3. **Type**: t3.medium (2 vCPU, 4 GB)
 4. **Storage**: 30 GB gp3
 5. **Security Group**: SSH (22) from your IP
 6. Download key pair → Launch
 
 ```bash
-ssh -i your-key.pem ubuntu@YOUR_IP
+ssh -i your-key.pem ec2-user@YOUR_IP
 ```
 
 ---
@@ -22,9 +22,14 @@ ssh -i your-key.pem ubuntu@YOUR_IP
 ## STEP 2: Install Node.js 22 + OpenClaw
 
 ```bash
-sudo apt update && sudo apt upgrade -y
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs git curl
+sudo yum update -y
+sudo yum install -y git curl
+
+# Install Node.js 22 via NodeSource
+curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+sudo yum install -y nodejs
+
+# Install OpenClaw and tsx globally
 sudo npm install -g openclaw@latest tsx
 ```
 
