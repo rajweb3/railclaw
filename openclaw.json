@@ -14,18 +14,21 @@
       {
         id: "business-owner",
         name: "Railclaw Business",
-        workspace: "~/.openclaw/workspace-owner"
+        workspace: "~/.openclaw/workspace-owner",
+        subagents: { allowAgents: ["orchestrator"] }
       },
       {
         id: "business-product",
         default: true,
         name: "Railclaw Product",
-        workspace: "~/.openclaw/workspace-product"
+        workspace: "~/.openclaw/workspace-product",
+        subagents: { allowAgents: ["orchestrator"] }
       },
       {
         id: "orchestrator",
         name: "Railclaw Orchestrator",
-        workspace: "~/.openclaw/workspace-orchestrator"
+        workspace: "~/.openclaw/workspace-orchestrator",
+        subagents: { allowAgents: ["*"] }
       }
     ]
   },
@@ -82,6 +85,14 @@
     profile: "coding",
     elevated: {
       enabled: true
+    },
+    // Enable cross-agent communication (owner/product → orchestrator)
+    agentToAgent: {
+      enabled: true,
+      allow: ["business-owner", "business-product", "orchestrator"]
+    },
+    sessions: {
+      visibility: "all"
     }
   },
 
