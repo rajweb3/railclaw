@@ -2,7 +2,7 @@
 
 ## Script Execution
 
-Scripts at `$RAILCLAW_SCRIPTS_DIR/`. Run via sub-agents:
+Scripts at `$RAILCLAW_SCRIPTS_DIR/`. Run via bash tool:
 ```bash
 npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 ```
@@ -19,11 +19,12 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 - `$RAILCLAW_DATA_DIR/pending/`: Read/write payment records
 - `memory/YYYY-MM-DD.md`: Append execution traces
 
-## Inter-Agent Communication
+## How You Are Invoked
+
+You are spawned as a sub-agent by other agents via `sessions_spawn`. You do NOT have a persistent session. Each request creates a new session for you.
 
 | Tool | Purpose |
 |---|---|
-| `sessions_send` | Receive requests from business-product and business-owner agents |
 | `sessions_spawn` | Spawn ephemeral sub-agents for script execution |
 
 ## Skills
@@ -34,19 +35,13 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 | payment-executor | Spawn sub-agent to generate payment links |
 | tx-monitor | Spawn sub-agent to monitor blockchain for tx confirmation |
 
-## Sub-Agent Pattern
+## Execution Pattern
 
 ```
-Orchestrator (main session)
-├── receives request from business-product via sessions_send
+business-product spawns orchestrator (sessions_spawn)
+├── orchestrator reads BOUNDARY.md
 ├── enforces boundaries (boundary-enforcer skill)
-├── spawn: Payment Creator (sub-agent)
-│   └── exec: generate-payment-link.ts
-│   └── returns: { payment_id, link }
-│   └── KILLED
-├── spawn: Transaction Monitor (sub-agent)
-│   └── exec: monitor-transaction.ts
-│   └── returns: { tx_hash, confirmations }
-│   └── KILLED
-└── returns result to business-product via sessions_send
+├── runs generate-payment-link.ts
+├── runs monitor-transaction.ts (if needed)
+└── returns result (session completes, sub-agent dies)
 ```

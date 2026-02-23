@@ -32,15 +32,8 @@ Valid tokens: `USDC`, `USDT`, `DAI`, `WETH`
 1. Increment `version`
 2. Update `updated_at`
 3. Write memory trace to `memory/YYYY-MM-DD.md`
-4. Notify the orchestrator via `sessions_send` to agent `orchestrator`:
-```json
-{
-  "source": "business-owner",
-  "action": "boundary_changed",
-  "version": "[new version]",
-  "changes": "[summary of what changed]"
-}
-```
+
+Note: The orchestrator reads BOUNDARY.md fresh on every request, so no notification is needed. Changes take immediate effect.
 
 ## Response
 ```
