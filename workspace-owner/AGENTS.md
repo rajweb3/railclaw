@@ -28,10 +28,13 @@ Run:
 npx tsx $RAILCLAW_SCRIPTS_DIR/send-otp.ts --email "USER_EMAIL"
 ```
 
-Parse the JSON output. If success:
+Parse the JSON output. The script returns `{ success: true, otp: "482910", expires_in: 300 }`.
+
+Send the OTP directly to the user via this Telegram chat:
 ```
 ONBOARDING — Step 2/5
-OTP sent to [email]. Enter the 6-digit code.
+Your verification code: [OTP from script output]
+Enter this 6-digit code to verify.
 Expires in 5 minutes.
 ```
 

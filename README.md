@@ -111,7 +111,6 @@ railclaw/
 - [OpenClaw](https://github.com/openclaw/openclaw) installed globally
 - Two Telegram bots (via @BotFather)
 - Anthropic API key
-- AWS SES (for OTP emails)
 - Blockchain RPC endpoints (Alchemy/Infura)
 
 ### Quick Start
@@ -123,7 +122,7 @@ cd railclaw
 
 # Configure
 cp .env.example .env
-# Fill in: Telegram tokens, Anthropic key, AWS SES, RPC endpoints, wallet encryption key
+# Fill in: Telegram tokens, Anthropic key, RPC endpoints, wallet encryption key
 
 # Setup (creates ~/.openclaw/ workspaces + systemd service)
 chmod +x setup.sh
@@ -174,7 +173,7 @@ With this boundary:
 | LLM | Anthropic Claude Sonnet 4.5 |
 | Messaging | Telegram (grammY) |
 | Wallet | ethers.js v6 (HD wallets, AES-256-GCM) |
-| Email OTP | AWS SES |
+| OTP Verification | Telegram (sent directly via bot) |
 | Blockchain | EVM RPCs (Polygon, Arbitrum, Ethereum, etc.) |
 | Deployment | Ubuntu 22.04 + systemd |
 
