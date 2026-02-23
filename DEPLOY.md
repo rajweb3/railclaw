@@ -1,6 +1,6 @@
 # Railclaw — AWS Deployment Guide
 
-Single OpenClaw instance, two agents, two Telegram bots.
+Single OpenClaw instance, three agents (including Service Orchestrator), two Telegram bots.
 
 ---
 
@@ -82,7 +82,7 @@ Save token → `TELEGRAM_BOT_TOKEN_PRODUCT`
 ```bash
 cd ~
 git clone YOUR_REPO railclaw
-cd railclaw/openclaw
+cd railclaw
 
 cp .env.example .env
 nano .env
@@ -127,7 +127,7 @@ This creates:
 ## STEP 7: Onboard OpenClaw
 
 ```bash
-source ~/railclaw/openclaw/.env
+source ~/railclaw/.env
 openclaw onboard
 ```
 
@@ -153,7 +153,7 @@ sudo systemctl status railclaw
 journalctl -u railclaw -f
 
 # Test bot tokens
-source ~/railclaw/openclaw/.env
+source ~/railclaw/.env
 curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN_OWNER}/getMe"
 curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN_PRODUCT}/getMe"
 ```
@@ -186,7 +186,7 @@ sudo systemctl restart railclaw
 sudo systemctl stop railclaw
 
 # Backup wallets (CRITICAL)
-cp -r ~/railclaw/openclaw/shared/data/wallets/ ~/backup-wallets-$(date +%Y%m%d)/
+cp -r ~/railclaw/shared/data/wallets/ ~/backup-wallets-$(date +%Y%m%d)/
 ```
 
 ---
@@ -198,8 +198,8 @@ cp -r ~/railclaw/openclaw/shared/data/wallets/ ~/backup-wallets-$(date +%Y%m%d)/
 journalctl -u railclaw -n 50 --no-pager
 
 # Test scripts directly
-source ~/railclaw/openclaw/.env
-cd ~/railclaw/openclaw/shared/scripts
-RAILCLAW_DATA_DIR=~/railclaw/openclaw/shared/data npx tsx send-otp.ts --email "test@test.com"
-RAILCLAW_DATA_DIR=~/railclaw/openclaw/shared/data npx tsx create-wallet.ts --email "test@test.com"
+source ~/railclaw/.env
+cd ~/railclaw/shared/scripts
+RAILCLAW_DATA_DIR=~/railclaw/shared/data npx tsx send-otp.ts --email "test@test.com"
+RAILCLAW_DATA_DIR=~/railclaw/shared/data npx tsx create-wallet.ts --email "test@test.com"
 ```
