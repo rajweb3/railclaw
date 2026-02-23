@@ -2,6 +2,11 @@
 
 ## System Overview
 
+![System Overview](docs/architecture/01-system-overview.png)
+
+<details>
+<summary>Mermaid source</summary>
+
 ```mermaid
 graph TB
     subgraph Telegram
@@ -66,7 +71,14 @@ graph TB
     SCRIPTS -->|"create-wallet.ts"| DATA
 ```
 
+</details>
+
 ## Three-Agent Model
+
+![Three-Agent Model](docs/architecture/02-three-agent-model.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 graph LR
@@ -93,7 +105,14 @@ graph LR
     S2 -->|"tx confirmed"| OR
 ```
 
+</details>
+
 ## Business Onboarding Flow
+
+![Onboarding Flow](docs/architecture/03-onboarding-flow.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -134,7 +153,14 @@ sequenceDiagram
     Agent->>Owner: ONBOARDED<br/>Wallet: 0xABC...<br/>Next: /boundary to configure
 ```
 
+</details>
+
 ## Payment Command Flow (via Orchestrator)
+
+![Payment Command Flow](docs/architecture/04-payment-command-flow.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -197,7 +223,14 @@ sequenceDiagram
     Product->>User: CONFIRMED<br/>TxHash: 0xdef...<br/>100 USDC on Polygon
 ```
 
+</details>
+
 ## Boundary Rejection Flow (via Orchestrator)
+
+![Boundary Rejection](docs/architecture/05-boundary-rejection.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -220,7 +253,14 @@ sequenceDiagram
     Product->>User: REJECTED<br/>Violation: chain<br/>Policy: [polygon]<br/>Received: solana
 ```
 
+</details>
+
 ## Boundary Change = Immediate Effect
+
+![Boundary Change](docs/architecture/06-boundary-change.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -251,7 +291,14 @@ sequenceDiagram
     PBot->>User: EXECUTED ✓
 ```
 
+</details>
+
 ## Workspace Layout
+
+![Workspace Layout](docs/architecture/07-workspace-layout.png)
+
+<details>
+<summary>Mermaid source</summary>
 
 ```mermaid
 graph LR
@@ -294,3 +341,5 @@ graph LR
     WP_SKILLS -.->|symlink| REPO_PD["repo/workspace-product/skills/"]
     WORCH_SKILLS -.->|symlink| REPO_OR["repo/workspace-orchestrator/skills/"]
 ```
+
+</details>
