@@ -11,7 +11,7 @@ Payment link generation has been moved to the **Service Orchestrator** agent.
 
 This bot (business-product) no longer spawns sub-agents or runs scripts. Instead:
 1. Parse the user's command
-2. Send it to the orchestrator via `sessions_send`
-3. The orchestrator spawns sub-agents for execution
+2. Spawn the orchestrator via `sessions_spawn`
+3. The orchestrator enforces boundaries and executes
 
 Do NOT run `generate-payment-link.ts` from this agent.

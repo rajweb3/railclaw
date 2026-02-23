@@ -11,7 +11,7 @@ Boundary enforcement has been moved to the **Service Orchestrator** agent.
 
 This bot (business-product) no longer checks boundaries directly. Instead:
 1. Parse the user's command
-2. Send it to the orchestrator via `sessions_send`
+2. Spawn the orchestrator via `sessions_spawn`
 3. The orchestrator enforces boundaries and returns the result
 
 Do NOT perform boundary checks in this agent.
