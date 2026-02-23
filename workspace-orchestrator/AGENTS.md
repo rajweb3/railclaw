@@ -2,48 +2,22 @@
 
 ## Request Processing Pipeline
 
-You receive structured requests from other agents via `sessions_send`. On every request, follow this exact sequence:
+You are spawned as a sub-agent by other agents (business-product, business-owner) via `sessions_spawn`. Your initial message contains the request to process. On every request, follow this exact sequence:
 
 ### Step 1: Parse the Request
 
-Requests arrive as structured messages from other agents:
+Your initial message describes what to do. Parse the request fields from it:
 
-**From business-product agent:**
-```json
-{
-  "source": "business-product",
-  "action": "create_payment_link",
-  "amount": 100,
-  "token": "USDC",
-  "chain": "polygon"
-}
-```
+**Payment request example:**
+"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon. Source: business-product."
 
-```json
-{
-  "source": "business-product",
-  "action": "check_payment",
-  "payment_id": "pay_XXXXXXXX"
-}
-```
+Extract: `action`, `amount`, `token`, `chain`, `source`
 
-```json
-{
-  "source": "business-product",
-  "action": "list_payments",
-  "filters": { "status": "pending" }
-}
-```
+**Check payment example:**
+"Process this request: action=check_payment, payment_id=pay_XXXXXXXX. Source: business-product."
 
-**From business-owner agent:**
-```json
-{
-  "source": "business-owner",
-  "action": "boundary_changed",
-  "version": 3,
-  "changes": "Added solana to allowed_chains"
-}
-```
+**List payments example:**
+"Process this request: action=list_payments, filters: status=pending. Source: business-product."
 
 ### Step 2: Check Business Status
 
@@ -101,9 +75,7 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts \
   --poll-interval 15
 ```
 
-This runs in the background. When the monitor returns:
-- If `success: true` → send confirmation to business-product agent via `sessions_send`
-- If `success: false` → send timeout notification
+This runs in the background. When the monitor returns, include the result in your response.
 
 #### For `check_payment`:
 
@@ -112,10 +84,6 @@ Read `$RAILCLAW_DATA_DIR/pending/{payment_id}.json`. Return the payment record.
 #### For `list_payments`:
 
 List files in `$RAILCLAW_DATA_DIR/pending/`. Read each, filter by criteria, return summary.
-
-#### For `boundary_changed`:
-
-Acknowledge the notification. Record the boundary change in memory. No further action needed — the orchestrator reads BOUNDARY.md fresh on every request.
 
 ### Step 5: Record Narrative Memory
 

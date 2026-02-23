@@ -4,36 +4,31 @@
 
 | Tool | Purpose |
 |---|---|
-| `sessions_send` | Send parsed commands to the orchestrator agent |
+| `sessions_spawn` | Spawn orchestrator sub-agent to process commands |
 
 ## Usage
 
-Send command to orchestrator:
+Spawn orchestrator sub-agent to handle a payment command:
 ```
-sessions_send to agent "orchestrator":
-{
-  "source": "business-product",
-  "action": "create_payment_link",
-  "amount": 100,
-  "token": "USDC",
-  "chain": "polygon"
-}
+sessions_spawn with agentId "orchestrator":
+"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon. Source: business-product."
 ```
 
-## Skills
+The orchestrator sub-agent will:
+1. Read BOUNDARY.md and enforce rules
+2. Execute the command (run scripts, generate links)
+3. Return the result
 
-| Skill | Purpose |
-|---|---|
-| command-parser | Parse natural language into structured commands |
+**IMPORTANT:** Use `sessions_spawn` — NOT `sessions_send`. The orchestrator has no channel binding and no persistent session. You must spawn a new sub-agent session for each request.
 
 ## Flow
 
 ```
 User Message
 ├── Parse command (this bot)
-├── Delegate to orchestrator (sessions_send)
+├── Spawn orchestrator sub-agent (sessions_spawn)
 ├── Orchestrator checks boundaries + executes
-├── Orchestrator returns result (sessions_send)
+├── Orchestrator returns result
 └── Format and display to user (this bot)
 ```
 
@@ -41,5 +36,4 @@ User Message
 
 - This bot does NOT run any scripts directly
 - This bot does NOT read BOUNDARY.md for enforcement
-- This bot does NOT spawn sub-agents
-- All execution is handled by the orchestrator
+- All execution is handled by the orchestrator via sessions_spawn

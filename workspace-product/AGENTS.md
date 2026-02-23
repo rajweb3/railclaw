@@ -31,37 +31,30 @@ If unparseable -> UNRECOGNIZED response. Stop.
 
 ### Step 2: Delegate to Orchestrator
 
-Send the parsed command to the **orchestrator** agent via `sessions_send`:
+Spawn a sub-agent session for the **orchestrator** agent via `sessions_spawn`. The orchestrator is not bound to any channel — you MUST use `sessions_spawn` (not `sessions_send`) to create a session for it.
 
-```json
-{
-  "source": "business-product",
-  "action": "create_payment_link",
-  "amount": 100,
-  "token": "USDC",
-  "chain": "polygon"
-}
+**Spawn pattern:**
+Use `sessions_spawn` with `agentId: "orchestrator"` and pass the command as the initial message.
+
+For create_payment_link:
+```
+Spawn orchestrator sub-agent with message:
+"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon. Source: business-product."
 ```
 
 For check_payment:
-```json
-{
-  "source": "business-product",
-  "action": "check_payment",
-  "payment_id": "pay_XXXXXXXX"
-}
+```
+Spawn orchestrator sub-agent with message:
+"Process this request: action=check_payment, payment_id=pay_XXXXXXXX. Source: business-product."
 ```
 
 For list_payments:
-```json
-{
-  "source": "business-product",
-  "action": "list_payments",
-  "filters": { "status": "pending" }
-}
+```
+Spawn orchestrator sub-agent with message:
+"Process this request: action=list_payments, filters: status=pending. Source: business-product."
 ```
 
-Use `sessions_send` with target agent ID `orchestrator`.
+Wait for the orchestrator sub-agent to complete and return the result.
 
 ### Step 3: Format Response
 
@@ -72,36 +65,10 @@ The orchestrator returns a structured JSON response. Format it for the Telegram 
 - `status: "not_ready"` -> NOT READY format
 - `status: "error"` -> ERROR format
 
-### Step 4: Handle Async Events
-
-The orchestrator may send you events via `sessions_send` after initial response:
-
-**Transaction Confirmed:**
-```json
-{
-  "source": "orchestrator",
-  "event": "tx_confirmed",
-  "payment_id": "pay_XXXXXXXX",
-  "tx_hash": "0x...",
-  "confirmations": 20
-}
-```
--> Format as CONFIRMED and send to the user.
-
-**Transaction Timeout:**
-```json
-{
-  "source": "orchestrator",
-  "event": "tx_timeout",
-  "payment_id": "pay_XXXXXXXX"
-}
-```
--> Format as TX TIMEOUT and send to the user.
-
 ## Important Rules
 
 - NEVER check boundaries yourself — that is the orchestrator's job
 - NEVER run scripts directly — that is the orchestrator's job via sub-agents
 - NEVER modify BOUNDARY.md
-- ALWAYS delegate execution to the orchestrator via `sessions_send`
+- ALWAYS use `sessions_spawn` (NOT `sessions_send`) to delegate to the orchestrator
 - ALWAYS format orchestrator responses into user-friendly Telegram messages
