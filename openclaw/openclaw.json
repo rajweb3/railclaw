@@ -1,0 +1,103 @@
+{
+  // Railclaw — Single OpenClaw instance with three agents
+  // Agent 1: business-owner (onboarding + boundary management)
+  // Agent 2: business-product (payment commands — delegates to orchestrator)
+  // Agent 3: orchestrator (central coordination — boundary enforcement + execution)
+
+  agents: {
+    defaults: {
+      model: {
+        primary: "anthropic/claude-sonnet-4-5"
+      }
+    },
+    list: [
+      {
+        id: "business-owner",
+        name: "Railclaw Business",
+        workspace: "~/.openclaw/workspace-owner"
+      },
+      {
+        id: "business-product",
+        default: true,
+        name: "Railclaw Product",
+        workspace: "~/.openclaw/workspace-product"
+      },
+      {
+        id: "orchestrator",
+        name: "Railclaw Orchestrator",
+        workspace: "~/.openclaw/workspace-orchestrator"
+      }
+    ]
+  },
+
+  // Route each Telegram bot to its agent
+  // Orchestrator is NOT bound to any channel — it receives via sessions_send
+  bindings: [
+    {
+      agentId: "business-owner",
+      match: { channel: "telegram", accountId: "owner" }
+    },
+    {
+      agentId: "business-product",
+      match: { channel: "telegram", accountId: "product" }
+    }
+  ],
+
+  channels: {
+    telegram: {
+      enabled: true,
+
+      // Multiple Telegram bot accounts under one channel
+      accounts: {
+        owner: {
+          botToken: "${TELEGRAM_BOT_TOKEN_OWNER}",
+          dmPolicy: "pairing",
+          groups: {
+            "*": { requireMention: true, groupPolicy: "allowlist" }
+          },
+          commands: { native: "auto" },
+          customCommands: [
+            { command: "onboard", description: "Start business onboarding" },
+            { command: "boundary", description: "Manage payment boundaries" },
+            { command: "wallet", description: "View wallet information" }
+          ]
+        },
+        product: {
+          botToken: "${TELEGRAM_BOT_TOKEN_PRODUCT}",
+          dmPolicy: "open",
+          allowFrom: ["*"],
+          groups: {
+            "*": { requireMention: true, groupPolicy: "open" }
+          },
+          commands: { native: "auto" }
+        }
+      },
+
+      streamMode: "partial",
+      replyToMode: "all"
+    }
+  },
+
+  tools: {
+    profile: "coding",
+    elevated: {
+      enabled: true
+    }
+  },
+
+  session: {
+    scope: "per-sender",
+    reset: {
+      mode: "idle",
+      idleMinutes: 60
+    }
+  },
+
+  gateway: {
+    port: 18789,
+    bind: "loopback",
+    auth: {
+      mode: "token"
+    }
+  }
+}
