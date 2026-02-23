@@ -93,6 +93,13 @@
     }
   },
 
+  plugins: {
+    enabled: true,
+    entries: {
+      telegram: { enabled: true }
+    }
+  },
+
   gateway: {
     mode: "local",
     port: 18789,
