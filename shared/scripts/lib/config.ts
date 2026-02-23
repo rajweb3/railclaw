@@ -2,17 +2,9 @@ import { resolve } from 'path';
 
 /**
  * Central configuration loaded from environment variables.
- * All scripts use this to access AWS, RPC, encryption, and monitoring settings.
- *
- * IMPORTANT: In Docker, these env vars are set via the .env file
- * and passed through docker-compose.yml.
+ * All scripts use this to access RPC, encryption, and monitoring settings.
  */
 export const config = {
-  aws: {
-    region: process.env.AWS_REGION || 'us-east-1',
-    sesFromEmail: process.env.SES_FROM_EMAIL || 'noreply@railclaw.io',
-  },
-
   rpc: {
     polygon: process.env.RPC_POLYGON || 'https://polygon-rpc.com',
     arbitrum: process.env.RPC_ARBITRUM || 'https://arb1.arbitrum.io/rpc',

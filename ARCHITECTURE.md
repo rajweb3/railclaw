@@ -50,6 +50,7 @@ graph TB
     subgraph SHARED["Shared Resources"]
         BOUNDARY["BOUNDARY.md<br/>(single source of truth)"]
         SCRIPTS["Scripts<br/>send-otp · verify-otp<br/>create-wallet · generate-link<br/>monitor-tx · check-confirm"]
+
         DATA["Data<br/>wallets/ · pending/ · otp/"]
     end
 
@@ -66,7 +67,6 @@ graph TB
     SA1 --> DATA
     SA2 --> DATA
 
-    SCRIPTS -->|"send-otp.ts"| SES["AWS SES"]
     SCRIPTS -->|"monitor-tx.ts"| RPC["Blockchain RPCs"]
     SCRIPTS -->|"create-wallet.ts"| DATA
 ```
@@ -120,7 +120,6 @@ sequenceDiagram
     participant Bot as @railclaw_biz_bot
     participant Agent as Agent: business-owner
     participant Script as Scripts
-    participant SES as AWS SES
     participant Store as data/wallets/
     participant Orch as Agent: orchestrator
 
@@ -132,11 +131,9 @@ sequenceDiagram
 
     Owner->>Agent: user@business.com
     Agent->>Script: exec: send-otp.ts --email user@business.com
-    Script->>SES: Send OTP email
-    SES-->>Owner: Email with 6-digit code
-    Script-->>Agent: { success: true, expires_in: 300 }
+    Script-->>Agent: { success: true, otp: "482910", expires_in: 300 }
 
-    Agent->>Owner: ONBOARDING Step 2/5<br/>Enter the 6-digit code
+    Agent->>Owner: ONBOARDING Step 2/5<br/>Your code: 482910<br/>Enter this 6-digit code
 
     Owner->>Agent: 482910
     Agent->>Script: exec: verify-otp.ts --email ... --code 482910

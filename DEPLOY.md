@@ -19,24 +19,23 @@ ssh -i your-key.pem ec2-user@YOUR_IP
 
 ---
 
-## STEP 2: Install Node.js 22 + OpenClaw
+## STEP 2: Install Git, OpenClaw, and tsx
 
 ```bash
 sudo yum update -y
-sudo yum install -y git curl
+sudo yum install -y git
 
-# Install Node.js 22 via NodeSource
-curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
-sudo yum install -y nodejs
+# Install OpenClaw (installs Node.js 22 automatically if missing)
+curl -fsSL https://openclaw.ai/install.sh | bash
 
-# Install OpenClaw and tsx globally
-sudo npm install -g openclaw@latest tsx
+# Install tsx globally
+npm install -g tsx
 ```
 
 Verify:
 ```bash
 node --version      # v22.x.x
-openclaw --version
+openclaw doctor
 ```
 
 ---
@@ -77,8 +76,9 @@ Save token → `TELEGRAM_BOT_TOKEN_PRODUCT`
 | Key | Where |
 |---|---|
 | `ANTHROPIC_API_KEY` | https://console.anthropic.com/ → Create key |
-| AWS SES | AWS Console → SES → Verify sender email/domain |
 | RPC endpoints | https://alchemy.com/ → Create apps for Polygon, Arbitrum |
+
+> **Note:** OTP verification is sent directly via the Telegram bot — no email service (SES/Resend) needed.
 
 ---
 
