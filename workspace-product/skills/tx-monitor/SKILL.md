@@ -11,5 +11,5 @@ Transaction monitoring has been moved to the **Service Orchestrator** agent.
 
 This bot (business-product) no longer spawns monitoring sub-agents. Instead:
 - The orchestrator spawns tx-monitor sub-agents automatically after payment link creation
-- When a transaction is confirmed, the orchestrator sends a `tx_confirmed` event to this bot via `sessions_send`
+- When a transaction is confirmed, the orchestrator returns the result in the spawned session
 - This bot formats the confirmation and displays it to the user

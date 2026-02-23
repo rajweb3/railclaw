@@ -45,10 +45,9 @@ This is a long-running command. Wait for it to complete. Return the full JSON ou
 When the monitor sub-agent returns:
 
 ### Transaction Confirmed
-Send to the business-product agent via `sessions_send`:
+Return the result (the parent session will receive it):
 ```json
 {
-  "source": "orchestrator",
   "event": "tx_confirmed",
   "payment_id": "pay_XXXXXXXX",
   "tx_hash": "0x...",
@@ -60,10 +59,9 @@ Send to the business-product agent via `sessions_send`:
 ```
 
 ### Timeout (no tx found)
-Send to business-product agent:
+Return:
 ```json
 {
-  "source": "orchestrator",
   "event": "tx_timeout",
   "payment_id": "pay_XXXXXXXX",
   "timeout_seconds": 3600

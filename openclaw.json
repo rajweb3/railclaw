@@ -34,7 +34,7 @@
   },
 
   // Route each Telegram bot to its agent
-  // Orchestrator is NOT bound to any channel — it receives via sessions_send
+  // Orchestrator is NOT bound to any channel — it is spawned via sessions_spawn
   bindings: [
     {
       agentId: "business-owner",
