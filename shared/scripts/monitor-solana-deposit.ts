@@ -13,7 +13,7 @@ import {
   TOKEN_PROGRAM_ID,
   createApproveCheckedInstruction,
 } from '@solana/spl-token';
-import { JsonRpcProvider, WebSocketProvider, Interface, zeroPadValue, keccak256 } from 'ethers';
+import { JsonRpcProvider, WebSocketProvider, Interface, zeroPadValue, toBeHex, keccak256 } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { decrypt } from './lib/crypto-utils.js';
 
@@ -36,6 +36,8 @@ import { decrypt } from './lib/crypto-utils.js';
  */
 
 // Minimal ABI for FilledV3Relay event on EVM SpokePool
+// Indexed fields: originChainId (topic[1]), depositId (topic[2]), relayer (topic[3])
+// depositor and recipient are NOT indexed — they must be checked from parsed args
 const EVM_SPOKE_POOL_ABI = [
   'event FilledV3Relay(' +
     'address inputToken,' +
@@ -43,13 +45,14 @@ const EVM_SPOKE_POOL_ABI = [
     'uint256 inputAmount,' +
     'uint256 outputAmount,' +
     'uint256 repaymentChainId,' +
-    'uint256 originChainId,' +
-    'uint32 depositId,' +
+    'uint256 indexed originChainId,' +
+    'uint32 indexed depositId,' +
     'uint32 fillDeadline,' +
     'uint32 exclusivityDeadline,' +
     'address exclusiveRelayer,' +
-    'address indexed depositor,' +
-    'address indexed recipient,' +
+    'address indexed relayer,' +
+    'address depositor,' +
+    'address recipient,' +
     'bytes message,' +
     'tuple(address updatedRecipient, bytes updatedMessage, uint256 updatedOutputAmount, uint8 fillType) relayExecutionInfo' +
   ')',
@@ -394,20 +397,26 @@ async function waitForEVMFill(
   const httpProvider   = new JsonRpcProvider(rpcUrl);
   const iface          = new Interface(EVM_SPOKE_POOL_ABI);
   const filledTopic    = iface.getEvent('FilledV3Relay')!.topicHash;
-  const recipientTopic = zeroPadValue(record.wallet, 32);
+  // Filter by originChainId (Solana) — the first indexed param (topics[1]).
+  // recipient is NOT indexed in FilledV3Relay, so we check it from parsed args.
+  const solanaChainId      = BigInt(config.bridge.acrossChainIds.solana);
+  const originChainIdTopic = zeroPadValue(toBeHex(solanaChainId), 32);
 
   const expectedOutputRaw = BigInt(record.bridge.raw_output_amount);
   const minOutput = (expectedOutputRaw * 9900n) / 10000n;
   const maxOutput = (expectedOutputRaw * 10100n) / 10000n;
-  const outputTokenLower = record.bridge.output_token_address.toLowerCase();
+  const outputTokenLower   = record.bridge.output_token_address.toLowerCase();
+  const recipientLower     = record.wallet.toLowerCase();
 
   function isMatchingLog(log: { topics: readonly string[]; data: string }): boolean {
     try {
       const parsed = iface.parseLog({ topics: Array.from(log.topics), data: log.data });
       if (!parsed) return false;
-      const logOutputToken: string = parsed.args['outputToken'];
+      const logRecipient: string    = parsed.args['recipient'];
+      const logOutputToken: string  = parsed.args['outputToken'];
       const logOutputAmount: bigint = parsed.args['outputAmount'];
       return (
+        logRecipient.toLowerCase()  === recipientLower   &&
         logOutputToken.toLowerCase() === outputTokenLower &&
         logOutputAmount >= minOutput &&
         logOutputAmount <= maxOutput
@@ -433,7 +442,7 @@ async function waitForEVMFill(
       try {
         const logs = await httpProvider.getLogs({
           address: spokePoolAddr,
-          topics:  [filledTopic, null, recipientTopic],
+          topics:  [filledTopic, originChainIdTopic],
           fromBlock: cs,
           toBlock:   ce,
         });
@@ -468,7 +477,7 @@ async function waitForEVMFill(
     }, remaining);
 
     wsProvider.on(
-      { address: spokePoolAddr, topics: [filledTopic, null, recipientTopic] },
+      { address: spokePoolAddr, topics: [filledTopic, originChainIdTopic] },
       async (log) => {
         if (!isMatchingLog(log)) return;
         clearTimeout(timeoutHandle);
