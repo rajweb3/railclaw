@@ -174,9 +174,10 @@ async function main() {
     success: true,
     payment_id: paymentId,
     bridge_instructions: {
-      // User sends USDC to this Solana address
+      // User sends USDC to the temp wallet address — their wallet auto-creates the ATA
+      // (showing the ATA directly causes wallets to create ATA-of-ATA instead)
       network:          'solana',
-      deposit_address:  depositATA.toString(),
+      deposit_address:  tempKeypair.publicKey.toString(),
       token,
       amount_to_send:   toHuman(rawInputAmount, decimals),
       relay_fee:        relayFee.toFixed(2),
