@@ -1,5 +1,5 @@
 /**
- * monitor-transaction.ts — Poll blockchain for incoming transfers matching a pending payment.
+ * monitor-transaction.ts — Watch blockchain for incoming transfers matching a pending payment.
  *
  * Usage:
  *   npx tsx monitor-transaction.ts \
@@ -11,7 +11,8 @@
  *   { success: false, status: "expired", reason: "..." }
  *
  * Behavior:
- *   - Polls RPC every N seconds for Transfer events to the wallet
+ *   - ERC-20 tokens: quick historical getLogs check, then WebSocket subscription
+ *   - Native tokens: block polling (no Transfer event to subscribe to)
  *   - Matches token + amount (with 1% slippage tolerance)
  *   - Waits for required confirmations
  *   - Updates payment record in $RAILCLAW_DATA_DIR/pending/
@@ -20,7 +21,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { ethers } from 'ethers';
+import { ethers, WebSocketProvider } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 
 const args = parseArgs(process.argv);
@@ -49,12 +50,11 @@ const tokenContract = config.tokens[chain]?.[token];
 const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
 const provider = new ethers.JsonRpcProvider(rpcUrl);
 
-// Free-tier RPCs (Alchemy, Infura) cap eth_getLogs to 10 blocks per request
+// Free-tier RPCs cap eth_getLogs to 10 blocks per request
 const MAX_BLOCK_RANGE = 10;
 
 const startTime = Date.now();
 const timeoutMs = timeoutSeconds * 1000;
-let lastCheckedBlock = 0;
 
 function updatePaymentRecord(status: string, txHash?: string, confirmations?: number): void {
   const filePath = join(resolveDataPath('pending'), `${paymentId}.json`);
@@ -83,62 +83,6 @@ async function getTokenDecimals(contractAddress: string): Promise<number> {
   }
 }
 
-async function checkForTransfer(): Promise<{ found: boolean; txHash?: string; blockNumber?: number }> {
-  const currentBlock = await provider.getBlockNumber();
-  const fromBlock = lastCheckedBlock > 0 ? lastCheckedBlock + 1 : currentBlock - 10;
-
-  if (fromBlock > currentBlock) return { found: false };
-
-  // Native token transfers (ETH, MATIC, etc.)
-  const nativeTokens = ['ETH', 'MATIC', 'AVAX', 'BNB', 'SOL'];
-  if (nativeTokens.includes(token)) {
-    for (let b = fromBlock; b <= currentBlock; b++) {
-      const block = await provider.getBlock(b, true);
-      if (!block?.prefetchedTransactions) continue;
-
-      for (const tx of block.prefetchedTransactions) {
-        if (
-          tx.to?.toLowerCase() === wallet &&
-          parseFloat(ethers.formatEther(tx.value)) >= amount * 0.99
-        ) {
-          lastCheckedBlock = currentBlock;
-          return { found: true, txHash: tx.hash, blockNumber: b };
-        }
-      }
-    }
-  }
-
-  // ERC-20 token transfers
-  if (tokenContract) {
-    const decimals = await getTokenDecimals(tokenContract);
-    const expectedAmount = ethers.parseUnits(amount.toString(), decimals);
-    const minAmount = (expectedAmount * 99n) / 100n; // 1% slippage
-    const recipientTopic = ethers.zeroPadValue(wallet, 32);
-
-    // Chunk getLogs into MAX_BLOCK_RANGE batches (free-tier RPC limit)
-    for (let chunkStart = fromBlock; chunkStart <= currentBlock; chunkStart += MAX_BLOCK_RANGE) {
-      const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, currentBlock);
-      const logs = await provider.getLogs({
-        address: tokenContract,
-        topics: [TRANSFER_TOPIC, null, recipientTopic],
-        fromBlock: chunkStart,
-        toBlock: chunkEnd,
-      });
-
-      for (const log of logs) {
-        const transferAmount = BigInt(log.data);
-        if (transferAmount >= minAmount) {
-          lastCheckedBlock = currentBlock;
-          return { found: true, txHash: log.transactionHash, blockNumber: log.blockNumber };
-        }
-      }
-    }
-  }
-
-  lastCheckedBlock = currentBlock;
-  return { found: false };
-}
-
 async function waitForConfirmations(txHash: string, txBlock: number): Promise<number> {
   while (Date.now() - startTime < timeoutMs) {
     const currentBlock = await provider.getBlockNumber();
@@ -149,79 +93,191 @@ async function waitForConfirmations(txHash: string, txBlock: number): Promise<nu
   return 0;
 }
 
-// Main loop
-async function main() {
-  console.error(`[monitor] ${paymentId}: ${amount} ${token} on ${chain} → ${wallet}`);
-  console.error(`[monitor] poll=${pollIntervalSeconds}s, timeout=${timeoutSeconds}s, confirmations=${requiredConfirmations}`);
+// ERC-20: historical getLogs check first, then WebSocket subscription.
+// Returns the matching transfer or throws on timeout.
+async function waitForERC20Transfer(
+  decimals: number,
+  minAmount: bigint,
+): Promise<{ txHash: string; blockNumber: number }> {
+  const wsUrl = rpcUrl.replace('https://', 'wss://');
+  const recipientTopic = ethers.zeroPadValue(wallet, 32);
 
-  while (Date.now() - startTime < timeoutMs) {
+  // Phase 1: Historical check — catches transfers that arrived before monitor started
+  const currentBlock = await provider.getBlockNumber();
+  const fromBlock = Math.max(0, currentBlock - 150);
+  console.error(`[monitor] ERC-20 historical check blocks ${fromBlock}–${currentBlock}...`);
+
+  for (let cs = fromBlock; cs <= currentBlock; cs += MAX_BLOCK_RANGE) {
+    const ce = Math.min(cs + MAX_BLOCK_RANGE - 1, currentBlock);
     try {
-      const result = await checkForTransfer();
-
-      if (result.found && result.txHash && result.blockNumber) {
-        console.error(`[monitor] TX found: ${result.txHash} at block ${result.blockNumber}`);
-        updatePaymentRecord('confirming', result.txHash, 0);
-
-        const finalConfirmations = await waitForConfirmations(result.txHash, result.blockNumber);
-
-        if (finalConfirmations >= requiredConfirmations) {
-          const confirmedAt = new Date().toISOString();
-          updatePaymentRecord('confirmed', result.txHash, finalConfirmations);
-
-          // Write notification for product bot to pick up on next request
-          try {
-            const notifDir = resolveDataPath('notifications');
-            mkdirSync(notifDir, { recursive: true });
-            writeFileSync(
-              join(notifDir, `${paymentId}.json`),
-              JSON.stringify({
-                type: 'direct_confirmed',
-                payment_id: paymentId,
-                tx_hash: result.txHash,
-                confirmations: finalConfirmations,
-                chain,
-                token,
-                amount,
-                confirmed_at: confirmedAt,
-              }, null, 2)
-            );
-          } catch (err: any) {
-            console.error(`Warning: Could not write notification: ${err.message}`);
-          }
-
-          console.log(
-            JSON.stringify({
-              success: true,
-              status: 'confirmed',
-              payment_id: paymentId,
-              tx_hash: result.txHash,
-              chain,
-              token,
-              amount,
-              confirmations: finalConfirmations,
-              confirmed_at: confirmedAt,
-            })
-          );
-          process.exit(0);
+      const logs = await provider.getLogs({
+        address: tokenContract,
+        topics: [TRANSFER_TOPIC, null, recipientTopic],
+        fromBlock: cs,
+        toBlock: ce,
+      });
+      for (const log of logs) {
+        if (BigInt(log.data) >= minAmount) {
+          console.error(`[monitor] Historical transfer found: ${log.transactionHash}`);
+          return { txHash: log.transactionHash, blockNumber: log.blockNumber };
         }
       }
+    } catch { /* skip chunk */ }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  // Phase 2: WebSocket subscription — instant notification on new Transfer
+  console.error(`[monitor] No historical transfer found — subscribing via WebSocket...`);
+  const wsProvider = new WebSocketProvider(wsUrl);
+
+  return new Promise<{ txHash: string; blockNumber: number }>((resolve, reject) => {
+    const remaining = timeoutMs - (Date.now() - startTime);
+    if (remaining <= 0) {
+      wsProvider.destroy();
+      reject(new Error('timeout'));
+      return;
+    }
+
+    const timeoutHandle = setTimeout(() => {
+      wsProvider.destroy();
+      reject(new Error('timeout'));
+    }, remaining);
+
+    wsProvider.on(
+      { address: tokenContract, topics: [TRANSFER_TOPIC, null, recipientTopic] },
+      (log) => {
+        if (BigInt(log.data) < minAmount) return;
+        clearTimeout(timeoutHandle);
+        wsProvider.destroy();
+        console.error(`[monitor] WebSocket Transfer detected: ${log.transactionHash}`);
+        resolve({ txHash: log.transactionHash, blockNumber: log.blockNumber });
+      },
+    );
+  });
+}
+
+// Native token path: block polling (no Transfer event to subscribe to)
+async function pollForNativeTransfer(): Promise<{ txHash: string; blockNumber: number } | null> {
+  let lastCheckedBlock = 0;
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = lastCheckedBlock > 0 ? lastCheckedBlock + 1 : currentBlock - 5;
+      for (let b = fromBlock; b <= currentBlock; b++) {
+        const block = await provider.getBlock(b, true);
+        if (!block?.prefetchedTransactions) continue;
+        for (const tx of block.prefetchedTransactions) {
+          if (
+            tx.to?.toLowerCase() === wallet &&
+            parseFloat(ethers.formatEther(tx.value)) >= amount * 0.99
+          ) {
+            return { txHash: tx.hash, blockNumber: b };
+          }
+        }
+      }
+      lastCheckedBlock = currentBlock;
     } catch (err: any) {
       console.error(`[monitor] Poll error: ${err.message}`);
     }
-
     await new Promise((r) => setTimeout(r, pollIntervalSeconds * 1000));
   }
+  return null;
+}
 
-  // Timeout
-  updatePaymentRecord('expired');
-  console.log(
-    JSON.stringify({
-      success: false,
-      status: 'expired',
+async function main() {
+  console.error(`[monitor] ${paymentId}: ${amount} ${token} on ${chain} → ${wallet}`);
+  console.error(`[monitor] timeout=${timeoutSeconds}s, confirmations=${requiredConfirmations}`);
+
+  let txHash: string;
+  let txBlock: number;
+
+  const nativeTokens = ['ETH', 'MATIC', 'AVAX', 'BNB', 'SOL'];
+
+  if (nativeTokens.includes(token)) {
+    const result = await pollForNativeTransfer();
+    if (!result) {
+      updatePaymentRecord('expired');
+      console.log(JSON.stringify({
+        success: false, status: 'expired', payment_id: paymentId,
+        reason: `No matching transaction within ${timeoutSeconds}s`,
+      }));
+      return;
+    }
+    txHash = result.txHash;
+    txBlock = result.blockNumber;
+  } else if (tokenContract) {
+    const decimals = await getTokenDecimals(tokenContract);
+    const expectedAmount = ethers.parseUnits(amount.toString(), decimals);
+    const minAmount = (expectedAmount * 99n) / 100n; // 1% slippage
+    try {
+      const result = await waitForERC20Transfer(decimals, minAmount);
+      txHash = result.txHash;
+      txBlock = result.blockNumber;
+    } catch {
+      updatePaymentRecord('expired');
+      console.log(JSON.stringify({
+        success: false, status: 'expired', payment_id: paymentId,
+        reason: `No matching transaction within ${timeoutSeconds}s`,
+      }));
+      return;
+    }
+  } else {
+    console.log(JSON.stringify({ success: false, error: `No contract address for ${token} on ${chain}` }));
+    process.exit(1);
+  }
+
+  console.error(`[monitor] TX found: ${txHash} at block ${txBlock}`);
+  updatePaymentRecord('confirming', txHash, 0);
+
+  const finalConfirmations = await waitForConfirmations(txHash, txBlock);
+
+  if (finalConfirmations >= requiredConfirmations) {
+    const confirmedAt = new Date().toISOString();
+    updatePaymentRecord('confirmed', txHash, finalConfirmations);
+
+    // Write notification for product bot to pick up on next request
+    try {
+      const notifDir = resolveDataPath('notifications');
+      mkdirSync(notifDir, { recursive: true });
+      writeFileSync(
+        join(notifDir, `${paymentId}.json`),
+        JSON.stringify({
+          type: 'direct_confirmed',
+          payment_id: paymentId,
+          tx_hash: txHash,
+          confirmations: finalConfirmations,
+          chain,
+          token,
+          amount,
+          confirmed_at: confirmedAt,
+        }, null, 2)
+      );
+    } catch (err: any) {
+      console.error(`Warning: Could not write notification: ${err.message}`);
+    }
+
+    console.log(JSON.stringify({
+      success: true,
+      status: 'confirmed',
       payment_id: paymentId,
-      reason: `No matching transaction within ${timeoutSeconds}s`,
-    })
-  );
+      tx_hash: txHash,
+      chain,
+      token,
+      amount,
+      confirmations: finalConfirmations,
+      confirmed_at: confirmedAt,
+    }));
+    process.exit(0);
+  }
+
+  // Timed out waiting for confirmations
+  updatePaymentRecord('expired');
+  console.log(JSON.stringify({
+    success: false,
+    status: 'expired',
+    payment_id: paymentId,
+    reason: `Transaction found but did not reach ${requiredConfirmations} confirmations within ${timeoutSeconds}s`,
+  }));
 }
 
 main().catch((err) => {

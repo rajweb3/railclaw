@@ -13,7 +13,7 @@ import {
   TOKEN_PROGRAM_ID,
   createApproveCheckedInstruction,
 } from '@solana/spl-token';
-import { JsonRpcProvider, Interface, zeroPadValue, keccak256 } from 'ethers';
+import { JsonRpcProvider, WebSocketProvider, Interface, zeroPadValue, keccak256 } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { decrypt } from './lib/crypto-utils.js';
 
@@ -379,109 +379,112 @@ async function callDepositV3(
 }
 
 // Stage 3: Watch EVM SpokePool for FilledV3Relay
+// Phase 1 — quick historical getLogs check (catches fills that happened during Stage 2).
+// Phase 2 — WebSocket subscription so the fill is detected within milliseconds of emission.
 async function waitForEVMFill(
   record: PendingRecord,
   deadline: number,
-  pollMs: number,
-  lookbackBlocks = 5,
+  lookbackBlocks = 300,
 ): Promise<{ txHash: string; confirmations: number }> {
   const settlementChain = record.settlement_chain;
   const rpcUrl          = config.rpc[settlementChain];
+  const wsUrl           = rpcUrl.replace('https://', 'wss://');
   const spokePoolAddr   = record.bridge.spoke_pool_destination;
 
-  const provider        = new JsonRpcProvider(rpcUrl);
-  const iface           = new Interface(EVM_SPOKE_POOL_ABI);
-  const filledTopic     = iface.getEvent('FilledV3Relay')!.topicHash;
-  const recipientTopic  = zeroPadValue(record.wallet, 32);
+  const httpProvider   = new JsonRpcProvider(rpcUrl);
+  const iface          = new Interface(EVM_SPOKE_POOL_ABI);
+  const filledTopic    = iface.getEvent('FilledV3Relay')!.topicHash;
+  const recipientTopic = zeroPadValue(record.wallet, 32);
 
   const expectedOutputRaw = BigInt(record.bridge.raw_output_amount);
-  const slippageBps       = 100n;
-  const minOutput         = (expectedOutputRaw * (10000n - slippageBps)) / 10000n;
-  const maxOutput         = (expectedOutputRaw * (10000n + slippageBps)) / 10000n;
-  const outputTokenLower  = record.bridge.output_token_address.toLowerCase();
+  const minOutput = (expectedOutputRaw * 9900n) / 10000n;
+  const maxOutput = (expectedOutputRaw * 10100n) / 10000n;
+  const outputTokenLower = record.bridge.output_token_address.toLowerCase();
 
-  // Alchemy free tier caps eth_getLogs at 10 blocks per request.
-  const MAX_BLOCK_RANGE = 10;
-  const CHUNK_DELAY_MS  = 200;
-
-  let fromBlock: number;
-  try {
-    const current = await provider.getBlockNumber();
-    fromBlock = Math.max(0, current - lookbackBlocks);
-  } catch {
-    fromBlock = 0;
+  function isMatchingLog(log: { topics: readonly string[]; data: string }): boolean {
+    try {
+      const parsed = iface.parseLog({ topics: Array.from(log.topics), data: log.data });
+      if (!parsed) return false;
+      const logOutputToken: string = parsed.args['outputToken'];
+      const logOutputAmount: bigint = parsed.args['outputAmount'];
+      return (
+        logOutputToken.toLowerCase() === outputTokenLower &&
+        logOutputAmount >= minOutput &&
+        logOutputAmount <= maxOutput
+      );
+    } catch { return false; }
   }
 
-  console.error(`[monitor-solana-deposit] Stage 3: Watching FilledV3Relay on ${settlementChain} SpokePool from block ${fromBlock}...`);
+  // Phase 1: Historical check — covers fills that happened while Stage 2 was running
+  let currentBlock = 0;
+  try {
+    currentBlock = await httpProvider.getBlockNumber();
+  } catch (err) {
+    console.error(`[monitor-solana-deposit] Stage 3: getBlockNumber failed: ${String(err)}`);
+  }
 
-  while (Date.now() < deadline) {
-    try {
-      const currentBlock = await provider.getBlockNumber();
-      // Use currentBlock - 1: avoids "invalid block range" on RPCs that haven't
-      // fully indexed the latest block yet
-      const safeToBlock = currentBlock - 1;
+  if (currentBlock > 0) {
+    const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+    console.error(`[monitor-solana-deposit] Stage 3: Historical check blocks ${fromBlock}–${currentBlock} (${lookbackBlocks} block lookback)...`);
 
-      if (safeToBlock < fromBlock) {
-        await sleep(pollMs);
-        continue;
-      }
-
-      // Walk from fromBlock to safeToBlock in chunks of MAX_BLOCK_RANGE.
-      // Update fromBlock per-chunk so errors mid-scan resume from the failed
-      // chunk rather than rescanning from the beginning.
-      let chunkStart = fromBlock;
-      let chunkError = false;
-      while (chunkStart <= safeToBlock) {
-        const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, safeToBlock);
-        let logs: Awaited<ReturnType<typeof provider.getLogs>>;
-        try {
-          logs = await provider.getLogs({
-            address: spokePoolAddr,
-            topics:  [filledTopic, null, recipientTopic],
-            fromBlock: chunkStart,
-            toBlock:   chunkEnd,
-          });
-          fromBlock = chunkEnd + 1; // advance only on success
-        } catch (chunkErr) {
-          console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(chunkErr)}`);
-          chunkError = true;
-          break; // retry this chunk after pollMs
-        }
-
+    const MAX_BLOCK_RANGE = 10;
+    for (let cs = fromBlock; cs <= currentBlock; cs += MAX_BLOCK_RANGE) {
+      const ce = Math.min(cs + MAX_BLOCK_RANGE - 1, currentBlock);
+      try {
+        const logs = await httpProvider.getLogs({
+          address: spokePoolAddr,
+          topics:  [filledTopic, null, recipientTopic],
+          fromBlock: cs,
+          toBlock:   ce,
+        });
         for (const log of logs) {
-          let parsed: ReturnType<Interface['parseLog']>;
-          try {
-            parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
-          } catch { continue; }
-          if (!parsed) continue;
-
-          const logOutputToken: string = parsed.args['outputToken'];
-          const logOutputAmount: bigint = parsed.args['outputAmount'];
-
-          if (
-            logOutputToken.toLowerCase() === outputTokenLower &&
-            logOutputAmount >= minOutput &&
-            logOutputAmount <= maxOutput
-          ) {
-            const receipt       = await provider.getTransactionReceipt(log.transactionHash);
-            const confirmations = receipt ? currentBlock - receipt.blockNumber + 1 : 1;
-            return { txHash: log.transactionHash, confirmations };
+          if (isMatchingLog(log)) {
+            const receipt = await httpProvider.getTransactionReceipt(log.transactionHash);
+            const confs   = receipt ? currentBlock - receipt.blockNumber + 1 : 1;
+            console.error(`[monitor-solana-deposit] Stage 3: Found historical fill: ${log.transactionHash}`);
+            return { txHash: log.transactionHash, confirmations: confs };
           }
         }
-        chunkStart = chunkEnd + 1;
-        if (chunkStart <= safeToBlock) await sleep(CHUNK_DELAY_MS);
-      }
-
-      if (!chunkError) {
-        fromBlock = safeToBlock + 1; // all chunks done cleanly
-      }
-    } catch (err) {
-      console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(err)}`);
+      } catch { /* skip this chunk and continue */ }
+      await sleep(100);
     }
-    await sleep(pollMs);
   }
 
-  throw new Error('FilledV3Relay not found within timeout');
+  // Phase 2: WebSocket subscription — instant notification when Across relayer fills
+  console.error(`[monitor-solana-deposit] Stage 3: No historical fill found — subscribing via WebSocket on ${settlementChain}...`);
+  const wsProvider = new WebSocketProvider(wsUrl);
+
+  return new Promise<{ txHash: string; confirmations: number }>((resolve, reject) => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      wsProvider.destroy();
+      reject(new Error('FilledV3Relay not found within timeout'));
+      return;
+    }
+
+    const timeoutHandle = setTimeout(() => {
+      wsProvider.destroy();
+      reject(new Error('FilledV3Relay not found within timeout'));
+    }, remaining);
+
+    wsProvider.on(
+      { address: spokePoolAddr, topics: [filledTopic, null, recipientTopic] },
+      async (log) => {
+        if (!isMatchingLog(log)) return;
+        clearTimeout(timeoutHandle);
+        wsProvider.destroy();
+        try {
+          const receipt  = await httpProvider.getTransactionReceipt(log.transactionHash);
+          const curBlock = await httpProvider.getBlockNumber();
+          const confs    = receipt ? curBlock - receipt.blockNumber + 1 : 1;
+          console.error(`[monitor-solana-deposit] Stage 3: WebSocket fill detected: ${log.transactionHash}`);
+          resolve({ txHash: log.transactionHash, confirmations: confs });
+        } catch {
+          resolve({ txHash: log.transactionHash, confirmations: 1 });
+        }
+      },
+    );
+  });
 }
 
 async function main() {
@@ -568,7 +571,7 @@ async function main() {
   // Stage 3: Wait for EVM fill
   let fillResult: { txHash: string; confirmations: number };
   try {
-    fillResult = await waitForEVMFill(record, deadline, pollMs, resumeStage3 ? stage3Lookback : 150);
+    fillResult = await waitForEVMFill(record, deadline, resumeStage3 ? stage3Lookback : 300);
   } catch (err) {
     record.status = 'expired';
     (record as Record<string, unknown>).expired_at = new Date().toISOString();
