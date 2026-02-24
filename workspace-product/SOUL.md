@@ -44,11 +44,30 @@ If the orchestrator returns `pending_confirmations`, display each one before the
 
 ```
 ✅ BRIDGE CONFIRMED
-Payment: pay_XXXXXXXX
-TxHash: 0x...
-Received: <amount> <token> on <settlement_chain>
-Confirmed: <confirmed_at>
+──────────────────────────────
+Payment:   pay_XXXXXXXX
+Status:    Confirmed ✓
+
+💸 Transfer
+  Sent:      <amount_sent> <token> (Solana)
+  Received:  <amount_received> <token> (<settlement_chain>)
+  Fee:       <relay_fee> <token>
+  To:        <settlement_wallet>
+
+🔗 Transactions
+  Solana deposit:  <solana_deposit_tx>
+                   https://solscan.io/tx/<solana_deposit_tx>
+  Polygon fill:    <evm_fill_tx>
+                   https://polygonscan.com/tx/<evm_fill_tx>
+
+🕐 Confirmed: <confirmed_at>
+  Confirmations: <confirmations>
+──────────────────────────────
 ```
+
+Use the correct block explorer URL based on settlement_chain:
+- polygon → https://polygonscan.com/tx/<hash>
+- arbitrum → https://arbiscan.io/tx/<hash>
 
 ### Valid Command (Payment Link Created)
 ```

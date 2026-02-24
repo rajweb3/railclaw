@@ -61,6 +61,8 @@ interface PendingRecord {
   status: string;
   token: string;
   wallet: string;
+  source_chain: string;
+  amount: number;
   bridge: {
     spoke_pool_source: string;
     spoke_pool_destination: string;
@@ -555,16 +557,31 @@ async function main() {
 
   // Write to notifications queue so the orchestrator can report confirmation
   // on the next product-bot message (push via poll-on-trigger pattern)
+  const decimals = 6;
+  const rawInput  = BigInt(record.bridge.raw_input_amount);
+  const rawOutput = BigInt(record.bridge.raw_output_amount);
+  const humanInput  = (Number(rawInput)  / 10 ** decimals).toFixed(decimals);
+  const humanOutput = (Number(rawOutput) / 10 ** decimals).toFixed(decimals);
+
   const notification = {
-    type:             'bridge_confirmed',
-    payment_id:       paymentId,
-    tx_hash:          fillResult.txHash,
-    confirmations:    fillResult.confirmations,
-    confirmed_at:     confirmedAt,
-    amount:           record.amount,
-    token:            record.token,
-    settlement_chain: record.settlement_chain,
+    type:              'bridge_confirmed',
+    payment_id:        paymentId,
+    // Solana side
+    solana_deposit_tx: (record as Record<string, unknown>).deposit_tx_sig ?? null,
+    amount_sent:       humanInput,
+    // Polygon/EVM side
+    evm_fill_tx:       fillResult.txHash,
+    amount_received:   humanOutput,
+    confirmations:     fillResult.confirmations,
+    // Bridge details
+    token:             record.token,
+    relay_fee:         record.bridge.relay_fee,
+    source_chain:      record.source_chain,
+    settlement_chain:  record.settlement_chain,
     settlement_wallet: record.bridge.settlement_wallet,
+    bridge_provider:   record.bridge.provider,
+    // Timing
+    confirmed_at:      confirmedAt,
   };
   try {
     const notifDir = resolveDataPath('notifications');
