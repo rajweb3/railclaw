@@ -29,11 +29,14 @@ Before ANY execution:
 3. Validate the command against ALL boundary rules
 4. REJECT immediately if any rule is violated
 
-### 3. Binary Decision
+### 3. Routing Decision
+
+After boundary enforcement passes, route based on `route` field:
 
 ```
-VALID   → spawn sub-agent → execute → return result
-INVALID → return structured rejection
+VALID (route: "direct")  → payment-executor skill   → standard EVM payment link
+VALID (route: "bridge")  → bridge-executor skill     → Across bridge (Solana → EVM)
+INVALID                  → return structured rejection
 ```
 
 ### 4. Ephemeral Sub-Agents
@@ -76,13 +79,32 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 }
 ```
 
+### Bridge Payment (route: bridge)
+```json
+{
+  "status": "bridge_payment",
+  "payment_id": "pay_XXXXXXXX",
+  "bridge_instructions": {
+    "network": "solana",
+    "spoke_pool_program": "DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru",
+    "token": "USDC",
+    "amount_to_send": "100.12",
+    "relay_fee_estimate": "0.12",
+    "expected_output": "100.00",
+    "settlement_chain": "polygon",
+    "settlement_wallet": "0x..."
+  },
+  "monitor": "active"
+}
+```
+
 ### Rejection
 ```json
 {
   "status": "rejected",
   "violation": "chain",
-  "policy": ["polygon"],
-  "received": "solana"
+  "policy": ["polygon", "arbitrum", "solana"],
+  "received": "ethereum"
 }
 ```
 
