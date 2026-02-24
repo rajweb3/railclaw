@@ -553,6 +553,29 @@ async function main() {
   (record as Record<string, unknown>).confirmed_at  = confirmedAt;
   writeFileSync(recordPath, JSON.stringify(record, null, 2));
 
+  // Write to notifications queue so the orchestrator can report confirmation
+  // on the next product-bot message (push via poll-on-trigger pattern)
+  const notification = {
+    type:             'bridge_confirmed',
+    payment_id:       paymentId,
+    tx_hash:          fillResult.txHash,
+    confirmations:    fillResult.confirmations,
+    confirmed_at:     confirmedAt,
+    amount:           record.amount,
+    token:            record.token,
+    settlement_chain: record.settlement_chain,
+    settlement_wallet: record.bridge.settlement_wallet,
+  };
+  try {
+    const notifDir = resolveDataPath('notifications');
+    const { mkdirSync } = await import('fs');
+    mkdirSync(notifDir, { recursive: true });
+    writeFileSync(`${notifDir}/${paymentId}.json`, JSON.stringify(notification, null, 2));
+    console.error(`[monitor-solana-deposit] Notification queued at notifications/${paymentId}.json`);
+  } catch (err) {
+    console.error(`[monitor-solana-deposit] Failed to write notification: ${String(err)}`);
+  }
+
   console.log(JSON.stringify({
     success:      true,
     status:       'confirmed',

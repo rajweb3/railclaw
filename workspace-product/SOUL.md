@@ -38,6 +38,18 @@ Take the orchestrator's structured JSON response and format it for the Telegram 
 
 ## Response Formats
 
+### Pending Bridge Confirmations (show FIRST, before current request result)
+
+If the orchestrator returns `pending_confirmations`, display each one before the current response:
+
+```
+✅ BRIDGE CONFIRMED
+Payment: pay_XXXXXXXX
+TxHash: 0x...
+Received: <amount> <token> on <settlement_chain>
+Confirmed: <confirmed_at>
+```
+
 ### Valid Command (Payment Link Created)
 ```
 EXECUTED
