@@ -397,45 +397,58 @@ async function waitForEVMFill(
   const maxOutput         = (expectedOutputRaw * (10000n + slippageBps)) / 10000n;
   const outputTokenLower  = record.bridge.output_token_address.toLowerCase();
 
-  let fromBlock: number | 'latest' = 'latest';
+  // Free-tier RPCs (Alchemy, Infura, etc.) cap eth_getLogs to 10 blocks per request.
+  // We query in chunks of MAX_BLOCK_RANGE to stay within limits.
+  const MAX_BLOCK_RANGE = 10;
+
+  let fromBlock: number;
   try {
     const current = await provider.getBlockNumber();
-    const lookback = settlementChain === 'polygon' ? 150 : 1500;
-    fromBlock = Math.max(0, current - lookback);
-  } catch { /* use 'latest' */ }
+    fromBlock = Math.max(0, current - 5); // small lookback in case fill arrived during Stage 2
+  } catch {
+    fromBlock = 0;
+  }
 
-  console.error(`[monitor-solana-deposit] Stage 3: Watching FilledV3Relay on ${settlementChain} SpokePool...`);
+  console.error(`[monitor-solana-deposit] Stage 3: Watching FilledV3Relay on ${settlementChain} SpokePool from block ${fromBlock}...`);
 
   while (Date.now() < deadline) {
     try {
       const currentBlock = await provider.getBlockNumber();
-      const logs = await provider.getLogs({
-        address: spokePoolAddr,
-        topics: [filledTopic, null, recipientTopic],
-        fromBlock,
-        toBlock: currentBlock,
-      });
 
-      for (const log of logs) {
-        let parsed: ReturnType<Interface['parseLog']>;
-        try {
-          parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
-        } catch { continue; }
-        if (!parsed) continue;
+      // Walk from fromBlock to currentBlock in chunks of MAX_BLOCK_RANGE
+      let chunkStart = fromBlock;
+      while (chunkStart <= currentBlock) {
+        const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, currentBlock);
+        const logs = await provider.getLogs({
+          address: spokePoolAddr,
+          topics:  [filledTopic, null, recipientTopic],
+          fromBlock: chunkStart,
+          toBlock:   chunkEnd,
+        });
 
-        const logOutputToken: string = parsed.args['outputToken'];
-        const logOutputAmount: bigint = parsed.args['outputAmount'];
+        for (const log of logs) {
+          let parsed: ReturnType<Interface['parseLog']>;
+          try {
+            parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
+          } catch { continue; }
+          if (!parsed) continue;
 
-        if (
-          logOutputToken.toLowerCase() === outputTokenLower &&
-          logOutputAmount >= minOutput &&
-          logOutputAmount <= maxOutput
-        ) {
-          const receipt      = await provider.getTransactionReceipt(log.transactionHash);
-          const confirmations = receipt ? currentBlock - receipt.blockNumber + 1 : 1;
-          return { txHash: log.transactionHash, confirmations };
+          const logOutputToken: string = parsed.args['outputToken'];
+          const logOutputAmount: bigint = parsed.args['outputAmount'];
+
+          if (
+            logOutputToken.toLowerCase() === outputTokenLower &&
+            logOutputAmount >= minOutput &&
+            logOutputAmount <= maxOutput
+          ) {
+            const receipt       = await provider.getTransactionReceipt(log.transactionHash);
+            const confirmations = receipt ? currentBlock - receipt.blockNumber + 1 : 1;
+            return { txHash: log.transactionHash, confirmations };
+          }
         }
+        chunkStart = chunkEnd + 1;
       }
+
       fromBlock = currentBlock + 1;
     } catch (err) {
       console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(err)}`);
