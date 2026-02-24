@@ -414,7 +414,8 @@ async function main() {
     process.exit(1);
   }
 
-  const connection = new Connection(config.rpc.solana, 'confirmed');
+  const wsEndpoint = config.rpc.solana.replace(/^https?:\/\//, 'wss://');
+  const connection = new Connection(config.rpc.solana, { commitment: 'confirmed', wsEndpoint });
   const depositATA = new PublicKey(record.bridge.deposit_address);
   const expectedRaw = BigInt(record.bridge.raw_input_amount);
 
