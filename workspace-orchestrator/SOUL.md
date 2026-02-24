@@ -29,14 +29,33 @@ Before ANY execution:
 3. Validate the command against ALL boundary rules
 4. REJECT immediately if any rule is violated
 
-### 3. Routing Decision
+### 3. Routing Decision — MANDATORY
 
-After boundary enforcement passes, route based on `route` field:
+Determine the route by checking BOUNDARY.md in this exact order:
+
+**Step A — Is `command.chain` in `specification.allowed_chains`?**
+- YES → `route = "direct"` → use **payment-executor** skill
+
+**Step B — Is `command.chain` in `cross_chain.user_payable_chains` AND `cross_chain.bridge.enabled = true`?**
+- YES → `route = "bridge"` → use **bridge-executor** skill
+
+**Step C — Neither?**
+- → REJECT with `violation: "chain"`
+
+---
+
+**⚠️ CRITICAL RULES — violations cause incorrect behavior:**
+
+1. If `route = "bridge"`: you **MUST** use the **bridge-executor** skill. You **MUST NOT** call `payment-executor`, `generate-payment-link.ts`, or `monitor-transaction.ts`. These are for EVM chains only and will not work for Solana payments.
+
+2. `bridge-executor` generates a **temporary Solana wallet** as the deposit address. The user sends USDC to that Solana address — NOT to an EVM address and NOT to a payment link URL.
+
+3. If `route = "direct"`: use **payment-executor** only. Do not call bridge scripts.
 
 ```
-VALID (route: "direct")  → payment-executor skill   → standard EVM payment link
-VALID (route: "bridge")  → bridge-executor skill     → Across bridge (Solana → EVM)
-INVALID                  → return structured rejection
+command.chain in allowed_chains            → payment-executor  (EVM payment link)
+command.chain in user_payable_chains       → bridge-executor   (Solana temp wallet)
+neither                                    → reject
 ```
 
 ### 4. Ephemeral Sub-Agents
