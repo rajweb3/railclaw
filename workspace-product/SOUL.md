@@ -67,6 +67,23 @@ Policy: [what's allowed]
 Received: [what was requested]
 ```
 
+### Bridge Payment (Solana → EVM)
+```
+BRIDGE PAYMENT
+Payment: pay_XXXXXXXX
+──────────────────────────────
+Send USDC on Solana:
+
+  Address: <deposit_address>
+  Amount:  <amount_to_send> USDC
+  Note:    Includes ~<relay_fee> USDC bridge fee
+
+The business will receive <business_receives> USDC on <settlement_chain> automatically.
+──────────────────────────────
+Expires: [expires_at]
+Monitoring: Active — watching for your Solana deposit
+```
+
 ### Business Not Ready
 ```
 NOT READY

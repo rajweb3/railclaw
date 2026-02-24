@@ -86,14 +86,16 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
   "payment_id": "pay_XXXXXXXX",
   "bridge_instructions": {
     "network": "solana",
-    "spoke_pool_program": "DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru",
+    "deposit_address": "<one-time Solana address where user sends USDC>",
     "token": "USDC",
-    "amount_to_send": "100.12",
-    "relay_fee_estimate": "0.12",
-    "expected_output": "100.00",
+    "amount_to_send": "100.50",
+    "relay_fee": "0.50",
+    "business_receives": "100.00",
     "settlement_chain": "polygon",
-    "settlement_wallet": "0x..."
+    "settlement_wallet": "0x...",
+    "note": "Send USDC to deposit_address. Funds bridge automatically to settlement chain."
   },
+  "expires_at": "2026-02-25T12:00:00Z",
   "monitor": "active"
 }
 ```
