@@ -19,5 +19,5 @@ const publicAddress = keypair.publicKey.toString();
 console.log('\n=== SOL Dispenser Wallet ===\n');
 console.log(`SOLANA_SOL_DISPENSER_KEY=${privateKeyHex}`);
 console.log(`\nSolana address to fund: ${publicAddress}`);
-console.log('\nSend at least 0.1 SOL to the address above before enabling bridge payments.');
-console.log('Each bridge payment consumes ~0.005 SOL in transaction fees.\n');
+console.log('\nSend at least 0.01 SOL to the address above before enabling bridge payments.');
+console.log('Each bridge payment consumes ~0.001 SOL in transaction fees (~100 payments per 0.01 SOL).\n');

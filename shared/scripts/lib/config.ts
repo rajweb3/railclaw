@@ -13,11 +13,11 @@ export const config = {
 
   sol: {
     // Solana wallet that holds SOL to fund temp wallets for transaction fees
-    // Generate with: solana-keygen new --outfile sol-dispenser.json
-    // Fund it with at least 0.1 SOL on mainnet
+    // Generate with: npx tsx shared/scripts/generate-sol-dispenser.ts
+    // Fund it with at least 0.01 SOL on mainnet (~100 payments)
     dispenserKey: process.env.SOLANA_SOL_DISPENSER_KEY || '',
-    // SOL sent to each temp wallet to cover depositV3 tx fees (~0.002 SOL needed)
-    fundAmountLamports: parseInt(process.env.SOLANA_FUND_LAMPORTS || '5000000'), // 0.005 SOL
+    // SOL sent to each temp wallet to cover depositV3 tx fees (~5000 lamports actual fee)
+    fundAmountLamports: parseInt(process.env.SOLANA_FUND_LAMPORTS || '1000000'), // 0.001 SOL
   },
 
   bridge: {
