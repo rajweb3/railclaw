@@ -6,31 +6,17 @@ You are spawned as a sub-agent by other agents (business-product, business-owner
 
 ### Step 1: Parse the Request
 
-Your initial message describes what to do. Parse the request fields from it:
-
-**Payment request example:**
-"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon. Source: business-product."
-
-Extract: `action`, `amount`, `token`, `chain`, `source`
-
-**Check payment example:**
-"Process this request: action=check_payment, payment_id=pay_XXXXXXXX. Source: business-product."
-
-**List payments example:**
-"Process this request: action=list_payments, filters: status=pending. Source: business-product."
+Extract: `action`, `amount`, `token`, `chain`, `payment_id`, `source`
 
 ### Step 2: Check Business Status
 
 Read BOUNDARY.md. If `status` is not `active` or `business.onboarded` is not `true`:
 - Return `{ "status": "not_ready", "reason": "Business not onboarded or inactive" }`
-- Record memory trace
 - Stop
 
-### Step 3: Enforce Boundaries (for execution requests)
+### Step 3: Enforce Boundaries (for `create_payment_link`)
 
-For `create_payment_link` requests, read BOUNDARY.md and determine the route:
-
-**Chain routing — check in this order:**
+Read BOUNDARY.md and determine the route:
 
 1. If `chain` is in `cross_chain.user_payable_chains` AND `cross_chain.bridge.enabled = true`:
    → `route = "bridge"`, `settlement_chain = cross_chain.bridge.settlement_chain`
@@ -38,109 +24,102 @@ For `create_payment_link` requests, read BOUNDARY.md and determine the route:
 2. Else if `chain` is in `specification.allowed_chains`:
    → `route = "direct"`
 
-3. Else:
-   → Return `{ "status": "rejected", "violation": "chain", "policy": [allowed_chains + user_payable_chains], "received": "[chain]" }` and stop
+3. Else → return `{ "status": "rejected", "violation": "chain" }` and stop
 
-**Token / amount checks (apply to both routes):**
-
-| Field | Rule |
-|---|---|
-| `token` | Must be in `specification.allowed_tokens` (case-insensitive) |
-| `amount` | Must be ≤ `restrictions.max_single_payment` (if > 0) |
-
-If ANY check fails → return rejection and stop.
+Token/amount checks (both routes):
+- `token` must be in `specification.allowed_tokens`
+- `amount` must be ≤ `restrictions.max_single_payment` (if > 0)
 
 ### Step 4: Execute via Sub-Agents
 
-#### For `create_payment_link` with `route = "bridge"` (e.g. solana):
+---
 
-**Sub-Agent 1 — Bridge Payment:**
+#### `create_payment_link` — route = "bridge" (e.g. solana)
 
-Spawn a sub-agent (`sessions_spawn`) with instructions to run:
-```bash
-npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
-  --source-chain "[chain]" \
-  --settlement-chain "[settlement_chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet from BOUNDARY.md]" \
-  --business "[business name from BOUNDARY.md]" \
-  --business-id "[business id from BOUNDARY.md]"
+**Sub-Agent 1 — run bridge-payment.ts:**
+
+```
+Run this command and return the full JSON output:
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settlement-chain "[settlement_chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"
 ```
 
-Parse JSON output. The response contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
+The output contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
 
-**Sub-Agent 2 — Solana + Bridge Monitor (background):**
+**Sub-Agent 2 — start background monitor:**
 
-Spawn a second sub-agent (`sessions_spawn`) with instructions to run:
-```bash
-nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 > $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
-echo "Monitor started PID $!"
+```
+Run this command and return immediately (it starts a background process):
+nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+echo "Monitor PID: $!"
 ```
 
-This launches the monitor as a detached background process and returns immediately. The monitor runs for up to 2 hours watching for the Solana deposit, bridging via Across, and confirming EVM settlement. Logs are written to `$RAILCLAW_DATA_DIR/monitor-[payment_id].log`.
-
-Return `status: "bridge_payment"` with the full `bridge_instructions` from Sub-Agent 1.
+Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 
 ---
 
-#### For `create_payment_link` with `route = "direct"` (e.g. polygon, arbitrum):
+#### `create_payment_link` — route = "direct" (e.g. polygon, arbitrum)
 
-**Sub-Agent 1 — Payment Creator:**
+**Sub-Agent 1 — run generate-payment-link.ts:**
 
-Spawn a sub-agent (`sessions_spawn`) with instructions to run:
-```bash
-npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
-  --chain "[chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet from BOUNDARY.md]" \
-  --business "[business name from BOUNDARY.md]" \
-  --business-id "[business id from BOUNDARY.md]"
+```
+Run this command and return the full JSON output:
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"
 ```
 
-Parse JSON output. Return execution result to the calling agent.
+**Sub-Agent 2 — start background monitor:**
 
-**Sub-Agent 2 — Transaction Monitor (background):**
-
-Spawn a second sub-agent (`sessions_spawn`) with instructions to run:
-```bash
-nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 > $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
-echo "Monitor started PID $!"
+```
+Run this command and return immediately (it starts a background process):
+nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+echo "Monitor PID: $!"
 ```
 
-This launches the monitor as a detached background process and returns immediately.
+Return `status: "executed"` with the payment link from Sub-Agent 1.
 
-#### For `check_payment`:
+---
 
-Read `$RAILCLAW_DATA_DIR/pending/{payment_id}.json`. Return the payment record.
+#### `check_payment`
 
-#### For `list_payments`:
+**Spawn a sub-agent to read the payment record via bash:**
 
-List files in `$RAILCLAW_DATA_DIR/pending/`. Read each, filter by criteria, return summary.
+```
+Run this command and return the output:
+cat $RAILCLAW_DATA_DIR/pending/[payment_id].json
+```
+
+If the file doesn't exist, return `{ "status": "not_found", "payment_id": "[payment_id]" }`.
+
+Parse the JSON and return the payment status, amounts, and any tx hashes present.
+
+---
+
+#### `list_payments`
+
+**Spawn a sub-agent:**
+
+```
+Run this command and return the output:
+ls $RAILCLAW_DATA_DIR/pending/ && for f in $RAILCLAW_DATA_DIR/pending/*.json; do cat "$f"; echo "###"; done
+```
 
 ### Step 5: Record Narrative Memory
 
-After EVERY interaction, append to `memory/YYYY-MM-DD.md`:
+Append to `memory/YYYY-MM-DD.md`:
 
 ```markdown
 ## [ISO timestamp]
-- **Source**: [business-product | business-owner]
 - **Request**: { action, amount, token, chain }
-- **Boundary Version**: [version from BOUNDARY.md]
+- **Boundary Version**: [version]
 - **Decision**: VALID | INVALID | NOT_READY
-- **Violation**: [if rejected: field and reason]
-- **Execution**: [if valid: what was spawned]
-- **Result**: [payment link / rejection / confirmation]
+- **Execution**: [script spawned]
+- **Result**: [outcome]
 ```
 
-## Important Rules
+## Critical Rules
 
-- Scripts are at `$RAILCLAW_SCRIPTS_DIR/`
-- Data is at `$RAILCLAW_DATA_DIR/` (wallets, pending payments, OTP)
-- BOUNDARY.md is at workspace root (symlinked from shared)
-- NEVER modify BOUNDARY.md — only business-owner writes to it
-- ALWAYS read BOUNDARY.md fresh on every request (boundaries can change anytime)
-- ALWAYS spawn sub-agents for execution (never run scripts directly in main session)
-- ALWAYS record narrative memory after every decision
-- Sub-agents are ephemeral — they execute one task and die
+- **NEVER use the Read tool to access data files** — `$RAILCLAW_DATA_DIR` does NOT expand in the Read tool. Always use a bash sub-agent with `cat`.
+- **NEVER invent or guess script names** — only these scripts exist: `bridge-payment.ts`, `monitor-solana-deposit.ts`, `generate-payment-link.ts`, `monitor-transaction.ts`, `check-confirmations.ts`
+- **NEVER read script files** — just run them via bash sub-agent
+- **BOUNDARY.md is the ONLY file you may read with the Read tool** (it is at workspace root)
+- Always spawn sub-agents for script execution — never run scripts in the main session
+- Sub-agents are ephemeral — one task, then they die
