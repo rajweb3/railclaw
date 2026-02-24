@@ -416,11 +416,19 @@ async function waitForEVMFill(
   while (Date.now() < deadline) {
     try {
       const currentBlock = await provider.getBlockNumber();
+      // Use currentBlock - 1 to avoid "invalid block range" errors from RPCs
+      // that haven't fully indexed the latest block yet
+      const safeToBlock = currentBlock - 1;
 
-      // Walk from fromBlock to currentBlock in chunks of MAX_BLOCK_RANGE
+      if (safeToBlock < fromBlock) {
+        await sleep(pollMs);
+        continue;
+      }
+
+      // Walk from fromBlock to safeToBlock in chunks of MAX_BLOCK_RANGE
       let chunkStart = fromBlock;
-      while (chunkStart <= currentBlock) {
-        const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, currentBlock);
+      while (chunkStart <= safeToBlock) {
+        const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, safeToBlock);
         const logs = await provider.getLogs({
           address: spokePoolAddr,
           topics:  [filledTopic, null, recipientTopic],
@@ -451,7 +459,7 @@ async function waitForEVMFill(
         chunkStart = chunkEnd + 1;
       }
 
-      fromBlock = currentBlock + 1;
+      fromBlock = safeToBlock + 1;
     } catch (err) {
       console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(err)}`);
     }
