@@ -12,7 +12,8 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { AnchorProvider, Program, BN, type Idl } from '@coral-xyz/anchor';
+import { AnchorProvider, Program, type Idl } from '@coral-xyz/anchor';
+import BN from 'bn.js';
 import { JsonRpcProvider, Interface, zeroPadValue } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { decrypt } from './lib/crypto-utils.js';
