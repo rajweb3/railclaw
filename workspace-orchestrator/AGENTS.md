@@ -70,18 +70,15 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
 
 Parse JSON output. The response contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
 
-**Sub-Agent 2 — Solana + Bridge Monitor:**
+**Sub-Agent 2 — Solana + Bridge Monitor (background):**
 
 Spawn a second sub-agent (`sessions_spawn`) with instructions to run:
 ```bash
-npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts \
-  --payment-id "[payment_id from Sub-Agent 1 output]" \
-  --settlement-chain "[settlement_chain]" \
-  --timeout 7200 \
-  --poll-interval 30
+nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 > $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+echo "Monitor started PID $!"
 ```
 
-This is a long-running background monitor. It watches for USDC on Solana, bridges via Across Protocol, then waits for EVM settlement confirmation.
+This launches the monitor as a detached background process and returns immediately. The monitor runs for up to 2 hours watching for the Solana deposit, bridging via Across, and confirming EVM settlement. Logs are written to `$RAILCLAW_DATA_DIR/monitor-[payment_id].log`.
 
 Return `status: "bridge_payment"` with the full `bridge_instructions` from Sub-Agent 1.
 
@@ -104,22 +101,15 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
 
 Parse JSON output. Return execution result to the calling agent.
 
-**Sub-Agent 2 — Transaction Monitor:**
+**Sub-Agent 2 — Transaction Monitor (background):**
 
 Spawn a second sub-agent (`sessions_spawn`) with instructions to run:
 ```bash
-npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts \
-  --payment-id "[payment_id]" \
-  --chain "[chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet]" \
-  --confirmations 20 \
-  --timeout 3600 \
-  --poll-interval 15
+nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 > $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+echo "Monitor started PID $!"
 ```
 
-This runs in the background. When the monitor returns, include the result in your response.
+This launches the monitor as a detached background process and returns immediately.
 
 #### For `check_payment`:
 
