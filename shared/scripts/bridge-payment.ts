@@ -1,37 +1,44 @@
 import { writeFileSync } from 'fs';
+import {
+  Keypair,
+  PublicKey,
+  Connection,
+} from '@solana/web3.js';
+import {
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
-import { generateId } from './lib/crypto-utils.js';
+import { generateId, encrypt } from './lib/crypto-utils.js';
 
 /**
- * Generate Across Protocol depositV3 parameters for a Solana → EVM bridge payment.
- * No Across API is used — all parameters are computed locally and the user submits
- * the depositV3 transaction to the Solana SpokePool directly from their wallet.
+ * Generate a temporary Solana keypair for receiving a bridge payment.
  *
- * Reference:
- *   Solana SpokePool program: DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru
- *   Polygon SpokePool:        0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096
- *   Arbitrum SpokePool:       0xe35e9842fceaca96570b734083f4a58e8f7c5f2a
+ * Flow:
+ *   1. Generate a one-time Solana keypair
+ *   2. Derive its USDC Associated Token Account (ATA) — this is where the user sends
+ *   3. Encrypt and store the temp private key in the payment record
+ *   4. Return deposit_address (ATA) so the user knows where to send USDC
+ *
+ * A background monitor (monitor-solana-deposit.ts) watches for USDC arrival at the
+ * deposit_address, then automatically calls depositV3 on the Across SpokePool and
+ * bridges the funds to the business wallet on the settlement chain.
  *
  * Args:
  *   --source-chain     solana
  *   --settlement-chain polygon | arbitrum
  *   --token            USDC
- *   --amount           100            (amount business will receive, in human-readable units)
+ *   --amount           100            (amount business will receive)
  *   --wallet           0x...          (business EVM wallet on settlement chain)
  *   --business         "Acme Corp"
  *   --business-id      biz_xxx
  */
 
-// USDC / USDT use 6 decimals; DAI / WETH use 18
 const TOKEN_DECIMALS: Record<string, number> = {
-  USDC: 6,
-  USDT: 6,
-  DAI: 18,
-  WETH: 18,
+  USDC: 6, USDT: 6, DAI: 18, WETH: 18,
 };
 
 function toRawAmount(human: number, decimals: number): bigint {
-  // Avoid floating-point precision issues by rounding to the nearest integer unit
   return BigInt(Math.round(human * 10 ** decimals));
 }
 
@@ -46,99 +53,115 @@ function toHuman(raw: bigint, decimals: number): string {
 async function main() {
   const args = parseArgs(process.argv);
 
-  const sourceChain = args['source-chain'];
+  const sourceChain     = args['source-chain'];
   const settlementChain = args['settlement-chain'];
-  const token = args['token']?.toUpperCase();
-  const amount = parseFloat(args['amount']);
-  const wallet = args['wallet'];
-  const businessName = args['business'];
-  const businessId = args['business-id'];
+  const token           = args['token']?.toUpperCase();
+  const amount          = parseFloat(args['amount']);
+  const wallet          = args['wallet'];
+  const businessName    = args['business'];
+  const businessId      = args['business-id'];
 
   if (!sourceChain || !settlementChain || !token || !amount || !wallet || !businessName || !businessId) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
     process.exit(1);
   }
 
-  // Validate chain support
+  if (sourceChain !== 'solana') {
+    console.log(JSON.stringify({ success: false, error: `bridge-payment.ts only handles Solana source chain, got: ${sourceChain}` }));
+    process.exit(1);
+  }
+
+  // Validate chain/token support
   const spokePoolSource = config.bridge.spokePools[sourceChain];
-  const spokePoolDest = config.bridge.spokePools[settlementChain];
+  const spokePoolDest   = config.bridge.spokePools[settlementChain];
   if (!spokePoolSource || !spokePoolDest) {
     console.log(JSON.stringify({ success: false, error: `Unsupported chain pair: ${sourceChain} → ${settlementChain}` }));
     process.exit(1);
   }
 
-  // Resolve token addresses
-  const inputTokenAddress = config.tokens[sourceChain]?.[token];
-  const outputTokenAddress = config.tokens[settlementChain]?.[token];
-  if (!inputTokenAddress || !outputTokenAddress) {
+  const inputTokenMint  = config.tokens[sourceChain]?.[token];
+  const outputTokenAddr = config.tokens[settlementChain]?.[token];
+  if (!inputTokenMint || !outputTokenAddr) {
     console.log(JSON.stringify({ success: false, error: `Token ${token} not supported on ${sourceChain} or ${settlementChain}` }));
+    process.exit(1);
+  }
+
+  if (!config.encryption.walletKey) {
+    console.log(JSON.stringify({ success: false, error: 'WALLET_ENCRYPTION_KEY is not set' }));
     process.exit(1);
   }
 
   const decimals = TOKEN_DECIMALS[token] ?? 6;
 
   // Estimate relay fee: max(pct-based, minimum buffer)
-  const pctFee = amount * config.bridge.estimatedRelayFeePct;
-  const relayFee = Math.max(pctFee, config.bridge.minRelayFeeBuffer);
-  const amountToSend = amount + relayFee; // user sends this on source chain
-  const outputAmount = amount;            // business receives exactly this
+  const pctFee    = amount * config.bridge.estimatedRelayFeePct;
+  const relayFee  = Math.max(pctFee, config.bridge.minRelayFeeBuffer);
+  const inputAmt  = amount + relayFee; // user sends this
+  const outputAmt = amount;            // business receives this
 
-  const rawInputAmount = toRawAmount(amountToSend, decimals);
-  const rawOutputAmount = toRawAmount(outputAmount, decimals);
-  const rawRelayFee = toRawAmount(relayFee, decimals);
+  const rawInputAmount  = toRawAmount(inputAmt, decimals);
+  const rawOutputAmount = toRawAmount(outputAmt, decimals);
 
-  // depositV3 timing parameters
-  const now = Math.floor(Date.now() / 1000);
-  const fillDeadline = now + config.bridge.fillDeadlineOffsetSec; // 6 hours
-  const quoteTimestamp = now;
+  // depositV3 timing
+  const now          = Math.floor(Date.now() / 1000);
+  const fillDeadline = now + config.bridge.fillDeadlineOffsetSec;
 
-  const destinationChainId = config.bridge.acrossChainIds[settlementChain];
+  // --- Generate one-time Solana keypair ---
+  const tempKeypair = Keypair.generate();
 
-  // Build the depositV3 instruction parameters the user submits to the Solana SpokePool
-  const depositParams = {
-    depositor: '<user_solana_wallet>',           // filled by user's wallet at signing time
-    recipient: wallet,                            // business EVM address on settlement chain
-    inputToken: inputTokenAddress,                // USDC on Solana
-    outputToken: outputTokenAddress,              // USDC on destination EVM chain
-    inputAmount: rawInputAmount.toString(),
-    outputAmount: rawOutputAmount.toString(),
-    destinationChainId,
-    exclusiveRelayer: '0x0000000000000000000000000000000000000000',
-    quoteTimestamp,
-    fillDeadline,
-    exclusivityDeadline: 0,                       // no exclusive relayer
-    message: '',                                  // empty bytes
-  };
+  // Derive the USDC Associated Token Account for the temp wallet.
+  // This is the address the user sends USDC to — it's deterministic and doesn't
+  // need to exist yet (modern Solana wallets create it on first transfer).
+  const usdcMint = new PublicKey(inputTokenMint);
+  const depositATA = getAssociatedTokenAddressSync(
+    usdcMint,
+    tempKeypair.publicKey,
+    false,           // allowOwnerOffCurve — false for regular keypair
+    TOKEN_PROGRAM_ID,
+  );
 
-  // Create the pending payment record
+  // Encrypt and store the temp private key so monitor-solana-deposit.ts can use it
+  const encryptedPrivKey = encrypt(
+    Buffer.from(tempKeypair.secretKey).toString('hex'),
+    config.encryption.walletKey,
+  );
+
   const paymentId = generateId('pay');
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + config.payment.defaultExpiryHours * 60 * 60 * 1000);
 
   const record = {
-    payment_id: paymentId,
-    status: 'waiting_deposit',
-    source_chain: sourceChain,
+    payment_id:       paymentId,
+    status:           'waiting_deposit',
+    source_chain:     sourceChain,
     settlement_chain: settlementChain,
     token,
     amount,
     wallet,
-    business_name: businessName,
-    business_id: businessId,
+    business_name:    businessName,
+    business_id:      businessId,
     bridge: {
-      provider: 'across',
-      spoke_pool_source: spokePoolSource,
+      provider:               'across',
+      spoke_pool_source:      spokePoolSource,
       spoke_pool_destination: spokePoolDest,
-      origin_chain_id: config.bridge.acrossChainIds[sourceChain],
-      destination_chain_id: destinationChainId,
-      input_token: inputTokenAddress,
-      output_token: outputTokenAddress,
-      raw_input_amount: rawInputAmount.toString(),
-      raw_output_amount: rawOutputAmount.toString(),
-      raw_relay_fee: rawRelayFee.toString(),
-      fill_deadline: fillDeadline,
-      quote_timestamp: quoteTimestamp,
-      deposit_params: depositParams,
+      origin_chain_id:        config.bridge.acrossChainIds[sourceChain],
+      destination_chain_id:   config.bridge.acrossChainIds[settlementChain],
+      // Temp Solana keypair — private key encrypted at rest
+      temp_wallet_pubkey:     tempKeypair.publicKey.toString(),
+      deposit_address:        depositATA.toString(),   // user sends USDC here
+      temp_private_key_enc:   encryptedPrivKey,
+      // Token details
+      input_token_mint:       inputTokenMint,          // USDC mint on Solana
+      output_token_address:   outputTokenAddr,         // USDC contract on EVM
+      // Amounts
+      raw_input_amount:       rawInputAmount.toString(),
+      raw_output_amount:      rawOutputAmount.toString(),
+      relay_fee:              relayFee.toFixed(decimals > 6 ? 6 : decimals),
+      // depositV3 parameters
+      fill_deadline:          fillDeadline,
+      quote_timestamp:        now,
+      // Settlement
+      settlement_wallet:      wallet,
     },
     created_at: createdAt.toISOString(),
     expires_at: expiresAt.toISOString(),
@@ -151,19 +174,16 @@ async function main() {
     success: true,
     payment_id: paymentId,
     bridge_instructions: {
-      // Human-facing instructions for the paying user
-      network: sourceChain,
-      spoke_pool_program: spokePoolSource,
+      // User sends USDC to this Solana address
+      network:          'solana',
+      deposit_address:  depositATA.toString(),
       token,
-      input_token_address: inputTokenAddress,
-      amount_to_send: toHuman(rawInputAmount, decimals),
-      relay_fee_estimate: toHuman(rawRelayFee, decimals),
-      expected_output: toHuman(rawOutputAmount, decimals),
+      amount_to_send:   toHuman(rawInputAmount, decimals),
+      relay_fee:        relayFee.toFixed(2),
+      business_receives: toHuman(rawOutputAmount, decimals),
       settlement_chain: settlementChain,
       settlement_wallet: wallet,
-      fill_deadline_unix: fillDeadline,
-      // Raw depositV3 parameters for programmatic submission
-      deposit_params: depositParams,
+      note: 'Send USDC to deposit_address. Funds bridge automatically to settlement chain.',
     },
     expires_at: expiresAt.toISOString(),
   }));

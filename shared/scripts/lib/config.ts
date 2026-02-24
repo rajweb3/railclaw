@@ -11,6 +11,15 @@ export const config = {
     solana: process.env.RPC_SOLANA || 'https://api.mainnet-beta.solana.com',
   } as Record<string, string>,
 
+  sol: {
+    // Solana wallet that holds SOL to fund temp wallets for transaction fees
+    // Generate with: solana-keygen new --outfile sol-dispenser.json
+    // Fund it with at least 0.1 SOL on mainnet
+    dispenserKey: process.env.SOLANA_SOL_DISPENSER_KEY || '',
+    // SOL sent to each temp wallet to cover depositV3 tx fees (~0.002 SOL needed)
+    fundAmountLamports: parseInt(process.env.SOLANA_FUND_LAMPORTS || '5000000'), // 0.005 SOL
+  },
+
   bridge: {
     // Across Protocol chain IDs
     acrossChainIds: {

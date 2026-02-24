@@ -43,14 +43,10 @@ Immediately after Step 1 succeeds, spawn a second sub-agent via `sessions_spawn`
 ```
 Run the following command and return the JSON output when it completes:
 
-npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-bridge.ts \
+npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts \
   --payment-id "[payment_id]" \
-  --source-chain "[source_chain]" \
   --settlement-chain "[settlement_chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet]" \
-  --timeout 3600 \
+  --timeout 7200 \
   --poll-interval 30
 
 This is a long-running command. Wait for it to complete and return the full JSON output.
@@ -65,22 +61,20 @@ This is a long-running command. Wait for it to complete and return the full JSON
   "payment_id": "pay_XXXXXXXX",
   "bridge_instructions": {
     "network": "solana",
-    "spoke_pool_program": "DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru",
+    "deposit_address": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
     "token": "USDC",
-    "input_token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    "amount_to_send": "100.12",
-    "relay_fee_estimate": "0.12",
-    "expected_output": "100.00",
+    "amount_to_send": "100.50",
+    "relay_fee": "0.50",
+    "business_receives": "100.00",
     "settlement_chain": "polygon",
     "settlement_wallet": "0x...",
-    "fill_deadline_unix": 1740000000,
-    "deposit_params": { ... }
+    "note": "Send USDC to deposit_address. Funds bridge automatically to settlement chain."
   },
   "expires_at": "2026-02-25T12:00:00Z"
 }
 ```
 
-### monitor-bridge.ts (on fill)
+### monitor-solana-deposit.ts (on fill)
 ```json
 {
   "success": true,
@@ -100,11 +94,11 @@ This is a long-running command. Wait for it to complete and return the full JSON
   "payment_id": "pay_XXXXXXXX",
   "bridge_instructions": {
     "network": "solana",
-    "spoke_pool_program": "DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru",
+    "deposit_address": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
     "token": "USDC",
-    "amount_to_send": "100.12",
-    "relay_fee_estimate": "0.12",
-    "expected_output": "100.00",
+    "amount_to_send": "100.50",
+    "relay_fee": "0.50",
+    "business_receives": "100.00",
     "settlement_chain": "polygon",
     "settlement_wallet": "0x..."
   },
