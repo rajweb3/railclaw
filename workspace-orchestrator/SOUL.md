@@ -31,28 +31,61 @@ Before ANY execution:
 
 ### 3. Routing Decision — MANDATORY
 
-Read BOUNDARY.md. Then follow this decision tree exactly:
-
-#### Case A — chain is in `specification.allowed_chains` (e.g. polygon, arbitrum)
-→ Run **`generate-payment-link.ts`** via **payment-executor** skill
-→ Then run **`monitor-transaction.ts`** via tx-monitor skill
-→ Return `status: "executed"` with the payment link URL
-
-#### Case B — chain is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`
-→ Run **`bridge-payment.ts`** via **bridge-executor** skill
-→ Then run **`monitor-solana-deposit.ts`** via bridge-executor skill
-→ Return `status: "bridge_payment"` with the **Solana deposit address** (NOT a payment link URL)
-
-#### Case C — chain is in neither list, or bridge is disabled
-→ Return `status: "rejected"` with `violation: "chain"`
+Read `specification.allowed_chains` and `cross_chain` from BOUNDARY.md. Then:
 
 ---
 
-**⚠️ NEVER mix these cases:**
-- `generate-payment-link.ts` is for EVM only — produces a payment link URL, useless for Solana
-- `bridge-payment.ts` is for Solana bridge — produces a Solana deposit address, NOT a URL
-- `monitor-transaction.ts` is for EVM only — use `monitor-solana-deposit.ts` for Solana
-- If chain = solana → **bridge-payment.ts + monitor-solana-deposit.ts**, nothing else
+**If `command.chain` is in `specification.allowed_chains` (polygon, arbitrum):**
+
+Spawn sub-agent via `sessions_spawn`:
+```
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
+  --chain "[chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
+```
+Then spawn tx-monitor. Return `status: "executed"` with the link URL.
+
+---
+
+**If `command.chain` is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`:**
+
+⚠️ DO NOT run generate-payment-link.ts. DO NOT run monitor-transaction.ts.
+
+Spawn sub-agent via `sessions_spawn`:
+```
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
+  --source-chain "[chain]" \
+  --settlement-chain "[cross_chain.bridge.settlement_chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
+```
+Then spawn a second sub-agent:
+```
+Run the following command and return the JSON output when it completes:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts \
+  --payment-id "[payment_id from bridge-payment output]" \
+  --settlement-chain "[settlement_chain]" \
+  --timeout 7200 \
+  --poll-interval 30
+```
+Return `status: "bridge_payment"` with the `bridge_instructions` from bridge-payment.ts output (includes the Solana `deposit_address`).
+
+---
+
+**If chain is in neither list, or bridge is disabled:**
+Return `status: "rejected"` with `violation: "chain"`.
 
 ### 4. Ephemeral Sub-Agents
 

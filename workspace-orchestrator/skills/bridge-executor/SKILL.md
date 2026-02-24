@@ -1,6 +1,6 @@
 ---
 name: bridge-executor
-description: Spawns sub-agents to execute a cross-chain bridge payment via Across Protocol. Only called when boundary-enforcer returns route "bridge".
+description: "USE THIS for Solana payments. Runs bridge-payment.ts to generate a temporary Solana deposit address. Do NOT use payment-executor for solana."
 user-invocable: false
 metadata: {}
 ---

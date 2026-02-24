@@ -1,6 +1,6 @@
 ---
 name: payment-executor
-description: Spawns sub-agent to generate payment links. Only called after boundary enforcement passes.
+description: "EVM chains only (polygon, arbitrum). NEVER use for solana — use bridge-executor for solana."
 user-invocable: false
 metadata: {}
 ---
