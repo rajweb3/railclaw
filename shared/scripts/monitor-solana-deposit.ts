@@ -288,19 +288,8 @@ async function callDepositV3(
   };
   const provider = new AnchorProvider(connection, wallet as never, { commitment: 'confirmed' });
 
-  // Try to fetch IDL from on-chain; fall back to our minimal built-in IDL
-  let idl: Idl = SPOKE_POOL_IDL;
-  try {
-    const fetched = await Program.fetchIdl(programId, provider);
-    if (fetched) {
-      idl = fetched;
-      console.error('[monitor-solana-deposit] Using on-chain IDL');
-    }
-  } catch {
-    console.error('[monitor-solana-deposit] On-chain IDL fetch failed — using built-in IDL');
-  }
-
-  const program = new Program(idl, provider);
+  // Use built-in minimal IDL — on-chain IDL may use different naming conventions
+  const program = new Program(SPOKE_POOL_IDL, provider);
 
   // 2d — Prepare depositV3 arguments
   const recipientBytes32     = evmAddressToBytes32(record.bridge.settlement_wallet);
