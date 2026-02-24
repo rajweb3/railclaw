@@ -400,11 +400,9 @@ async function waitForEVMFill(
   const maxOutput         = (expectedOutputRaw * (10000n + slippageBps)) / 10000n;
   const outputTokenLower  = record.bridge.output_token_address.toLowerCase();
 
-  // Large lookbacks (manual resume) use bigger chunks to reduce request count.
-  // Normal polling (lookbackBlocks <= 100) uses 10-block chunks safe for any RPC.
-  const MAX_BLOCK_RANGE = lookbackBlocks > 100 ? 500 : 10;
-  // Delay between chunks: 500ms for large resume scans, 200ms for normal polling.
-  const CHUNK_DELAY_MS  = lookbackBlocks > 100 ? 500 : 200;
+  // Alchemy free tier caps eth_getLogs at 10 blocks per request.
+  const MAX_BLOCK_RANGE = 10;
+  const CHUNK_DELAY_MS  = 200;
 
   let fromBlock: number;
   try {
