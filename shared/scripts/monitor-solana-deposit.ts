@@ -400,9 +400,9 @@ async function waitForEVMFill(
   const maxOutput         = (expectedOutputRaw * (10000n + slippageBps)) / 10000n;
   const outputTokenLower  = record.bridge.output_token_address.toLowerCase();
 
-  // Free-tier RPCs (Alchemy, Infura, etc.) cap eth_getLogs to 10 blocks per request.
-  // We query in chunks of MAX_BLOCK_RANGE to stay within limits.
-  const MAX_BLOCK_RANGE = 10;
+  // Steady-state polling uses small chunks (10) safe for any RPC.
+  // Lookback scans use larger chunks (500) to avoid rate limits on Alchemy.
+  const MAX_BLOCK_RANGE = lookbackBlocks > 10 ? 500 : 10;
 
   let fromBlock: number;
   try {
@@ -459,7 +459,7 @@ async function waitForEVMFill(
         }
         chunkStart = chunkEnd + 1;
         // Brief pause between chunks to avoid hitting RPC rate limits
-        if (chunkStart <= safeToBlock) await sleep(200);
+        if (chunkStart <= safeToBlock) await sleep(lookbackBlocks > 10 ? 500 : 200);
       }
 
       fromBlock = safeToBlock + 1;
