@@ -400,9 +400,11 @@ async function waitForEVMFill(
   const maxOutput         = (expectedOutputRaw * (10000n + slippageBps)) / 10000n;
   const outputTokenLower  = record.bridge.output_token_address.toLowerCase();
 
-  // Steady-state polling uses small chunks (10) safe for any RPC.
-  // Lookback scans use larger chunks (500) to avoid rate limits on Alchemy.
-  const MAX_BLOCK_RANGE = lookbackBlocks > 10 ? 500 : 10;
+  // Large lookbacks (manual resume) use bigger chunks to reduce request count.
+  // Normal polling (lookbackBlocks <= 100) uses 10-block chunks safe for any RPC.
+  const MAX_BLOCK_RANGE = lookbackBlocks > 100 ? 500 : 10;
+  // Delay between chunks: 500ms for large resume scans, 200ms for normal polling.
+  const CHUNK_DELAY_MS  = lookbackBlocks > 100 ? 500 : 200;
 
   let fromBlock: number;
   try {
@@ -417,8 +419,8 @@ async function waitForEVMFill(
   while (Date.now() < deadline) {
     try {
       const currentBlock = await provider.getBlockNumber();
-      // Use currentBlock - 1 to avoid "invalid block range" errors from RPCs
-      // that haven't fully indexed the latest block yet
+      // Use currentBlock - 1: avoids "invalid block range" on RPCs that haven't
+      // fully indexed the latest block yet
       const safeToBlock = currentBlock - 1;
 
       if (safeToBlock < fromBlock) {
@@ -426,16 +428,27 @@ async function waitForEVMFill(
         continue;
       }
 
-      // Walk from fromBlock to safeToBlock in chunks of MAX_BLOCK_RANGE
+      // Walk from fromBlock to safeToBlock in chunks of MAX_BLOCK_RANGE.
+      // Update fromBlock per-chunk so errors mid-scan resume from the failed
+      // chunk rather than rescanning from the beginning.
       let chunkStart = fromBlock;
+      let chunkError = false;
       while (chunkStart <= safeToBlock) {
         const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, safeToBlock);
-        const logs = await provider.getLogs({
-          address: spokePoolAddr,
-          topics:  [filledTopic, null, recipientTopic],
-          fromBlock: chunkStart,
-          toBlock:   chunkEnd,
-        });
+        let logs: Awaited<ReturnType<typeof provider.getLogs>>;
+        try {
+          logs = await provider.getLogs({
+            address: spokePoolAddr,
+            topics:  [filledTopic, null, recipientTopic],
+            fromBlock: chunkStart,
+            toBlock:   chunkEnd,
+          });
+          fromBlock = chunkEnd + 1; // advance only on success
+        } catch (chunkErr) {
+          console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(chunkErr)}`);
+          chunkError = true;
+          break; // retry this chunk after pollMs
+        }
 
         for (const log of logs) {
           let parsed: ReturnType<Interface['parseLog']>;
@@ -458,11 +471,12 @@ async function waitForEVMFill(
           }
         }
         chunkStart = chunkEnd + 1;
-        // Brief pause between chunks to avoid hitting RPC rate limits
-        if (chunkStart <= safeToBlock) await sleep(lookbackBlocks > 10 ? 500 : 200);
+        if (chunkStart <= safeToBlock) await sleep(CHUNK_DELAY_MS);
       }
 
-      fromBlock = safeToBlock + 1;
+      if (!chunkError) {
+        fromBlock = safeToBlock + 1; // all chunks done cleanly
+      }
     } catch (err) {
       console.error(`[monitor-solana-deposit] EVM RPC error (will retry): ${String(err)}`);
     }
