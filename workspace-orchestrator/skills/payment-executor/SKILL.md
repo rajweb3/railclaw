@@ -7,9 +7,17 @@ metadata: {}
 
 # Payment Executor
 
+## ⚠️ EVM CHAINS ONLY
+
+**DO NOT use this skill for Solana or any chain in `cross_chain.user_payable_chains`.**
+
+If the payment chain is Solana (or any user-payable bridge chain): **stop, use bridge-executor instead.**
+
+This skill runs `generate-payment-link.ts` which creates an EVM payment link URL. It does NOT create a Solana deposit address and will not work for cross-chain bridge payments.
+
 ## Purpose
 
-Spawns an ephemeral sub-agent to generate a payment link. This skill is only invoked AFTER the boundary-enforcer has returned `valid: true`.
+Spawns an ephemeral sub-agent to generate an EVM payment link. Only for chains in `specification.allowed_chains` (e.g. polygon, arbitrum).
 
 ## Execution
 

@@ -31,32 +31,28 @@ Before ANY execution:
 
 ### 3. Routing Decision — MANDATORY
 
-Determine the route by checking BOUNDARY.md in this exact order:
+Read BOUNDARY.md. Then follow this decision tree exactly:
 
-**Step A — Is `command.chain` in `specification.allowed_chains`?**
-- YES → `route = "direct"` → use **payment-executor** skill
+#### Case A — chain is in `specification.allowed_chains` (e.g. polygon, arbitrum)
+→ Run **`generate-payment-link.ts`** via **payment-executor** skill
+→ Then run **`monitor-transaction.ts`** via tx-monitor skill
+→ Return `status: "executed"` with the payment link URL
 
-**Step B — Is `command.chain` in `cross_chain.user_payable_chains` AND `cross_chain.bridge.enabled = true`?**
-- YES → `route = "bridge"` → use **bridge-executor** skill
+#### Case B — chain is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`
+→ Run **`bridge-payment.ts`** via **bridge-executor** skill
+→ Then run **`monitor-solana-deposit.ts`** via bridge-executor skill
+→ Return `status: "bridge_payment"` with the **Solana deposit address** (NOT a payment link URL)
 
-**Step C — Neither?**
-- → REJECT with `violation: "chain"`
+#### Case C — chain is in neither list, or bridge is disabled
+→ Return `status: "rejected"` with `violation: "chain"`
 
 ---
 
-**⚠️ CRITICAL RULES — violations cause incorrect behavior:**
-
-1. If `route = "bridge"`: you **MUST** use the **bridge-executor** skill. You **MUST NOT** call `payment-executor`, `generate-payment-link.ts`, or `monitor-transaction.ts`. These are for EVM chains only and will not work for Solana payments.
-
-2. `bridge-executor` generates a **temporary Solana wallet** as the deposit address. The user sends USDC to that Solana address — NOT to an EVM address and NOT to a payment link URL.
-
-3. If `route = "direct"`: use **payment-executor** only. Do not call bridge scripts.
-
-```
-command.chain in allowed_chains            → payment-executor  (EVM payment link)
-command.chain in user_payable_chains       → bridge-executor   (Solana temp wallet)
-neither                                    → reject
-```
+**⚠️ NEVER mix these cases:**
+- `generate-payment-link.ts` is for EVM only — produces a payment link URL, useless for Solana
+- `bridge-payment.ts` is for Solana bridge — produces a Solana deposit address, NOT a URL
+- `monitor-transaction.ts` is for EVM only — use `monitor-solana-deposit.ts` for Solana
+- If chain = solana → **bridge-payment.ts + monitor-solana-deposit.ts**, nothing else
 
 ### 4. Ephemeral Sub-Agents
 
