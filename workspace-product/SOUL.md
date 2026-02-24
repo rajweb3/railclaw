@@ -127,11 +127,15 @@ Payment: pay_XXXXXXXX
 ──────────────────────────────
 Send USDC on Solana:
 
-  Address: <deposit_address>
-  Amount:  <amount_to_send> USDC
-  Note:    Includes ~<relay_fee> USDC bridge fee
+  Address:  <deposit_address>
 
-The business will receive <business_receives> USDC on <settlement_chain> automatically.
+💰 Amount Breakdown
+  Requested:   <business_receives> USDC
+  Bridge fee:  <relay_fee> USDC
+  ─────────────────────────
+  You send:    <amount_to_send> USDC
+
+The business receives <business_receives> USDC on <settlement_chain> automatically.
 ──────────────────────────────
 Expires: [expires_at]
 Monitoring: Active — watching for your Solana deposit
