@@ -1,18 +1,18 @@
 import { readFileSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
 import {
   Connection,
   Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
+  TransactionInstruction,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { AnchorProvider, Program, type Idl } from '@coral-xyz/anchor';
-import BN from 'bn.js';
 import { JsonRpcProvider, Interface, zeroPadValue } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { decrypt } from './lib/crypto-utils.js';
@@ -55,48 +55,6 @@ const EVM_SPOKE_POOL_ABI = [
   ')',
 ];
 
-// Minimal Across Solana SpokePool IDL for depositV3 only.
-// Program: DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru
-const SPOKE_POOL_IDL: Idl = {
-  version: '0.1.0',
-  name: 'svm_spoke',
-  instructions: [
-    {
-      name: 'depositV3',
-      accounts: [
-        { name: 'state',              isMut: true,  isSigner: false },
-        { name: 'route',              isMut: false, isSigner: false },
-        { name: 'signer',             isMut: true,  isSigner: true  },
-        { name: 'userTokenAccount',   isMut: true,  isSigner: false },
-        { name: 'relayerTokenAccount',isMut: true,  isSigner: false },
-        { name: 'mint',               isMut: false, isSigner: false },
-        { name: 'tokenProgram',       isMut: false, isSigner: false },
-        { name: 'program',            isMut: false, isSigner: false },
-        { name: 'eventAuthority',     isMut: false, isSigner: false },
-        { name: 'systemProgram',      isMut: false, isSigner: false },
-      ],
-      args: [
-        { name: 'depositor',           type: 'publicKey'             },
-        { name: 'recipient',           type: { array: ['u8', 32] }   },
-        { name: 'inputToken',          type: 'publicKey'             },
-        { name: 'outputToken',         type: { array: ['u8', 32] }   },
-        { name: 'inputAmount',         type: 'u64'                   },
-        { name: 'outputAmount',        type: 'u64'                   },
-        { name: 'destinationChainId',  type: 'u64'                   },
-        { name: 'exclusiveRelayer',    type: { array: ['u8', 32] }   },
-        { name: 'quoteTimestamp',      type: 'u32'                   },
-        { name: 'fillDeadline',        type: 'u32'                   },
-        { name: 'exclusivityDeadline', type: 'u32'                   },
-        { name: 'message',             type: 'bytes'                 },
-      ],
-    },
-  ],
-  accounts: [],
-  types: [],
-  errors: [],
-  events: [],
-  metadata: { address: 'DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru' },
-};
 
 interface PendingRecord {
   payment_id: string;
@@ -250,16 +208,14 @@ async function callDepositV3(
   record: PendingRecord,
   actualInputAmount: bigint,
 ): Promise<string> {
-  const programId    = new PublicKey(record.bridge.spoke_pool_source);
-  const inputMint    = new PublicKey(record.bridge.input_token_mint);
-  const depositATA   = new PublicKey(record.bridge.deposit_address);
+  const programId  = new PublicKey(record.bridge.spoke_pool_source);
+  const inputMint  = new PublicKey(record.bridge.input_token_mint);
+  const depositATA = new PublicKey(record.bridge.deposit_address);
 
   // 2a — Fund temp wallet with SOL for fees
   if (config.sol.dispenserKey) {
     console.error('[monitor-solana-deposit] Stage 2a: Funding temp wallet with SOL for fees...');
-    const dispenserKeypair = Keypair.fromSecretKey(
-      Buffer.from(config.sol.dispenserKey, 'hex'),
-    );
+    const dispenserKeypair = Keypair.fromSecretKey(Buffer.from(config.sol.dispenserKey, 'hex'));
     const fundTx = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: dispenserKeypair.publicKey,
@@ -280,61 +236,54 @@ async function callDepositV3(
     record.bridge.destination_chain_id,
   );
 
-  // 2c — Build Anchor provider and program
-  const wallet = {
-    publicKey:            tempKeypair.publicKey,
-    signTransaction:      async (tx: Transaction) => { tx.sign(tempKeypair); return tx; },
-    signAllTransactions:  async (txs: Transaction[]) => { txs.forEach(t => t.sign(tempKeypair)); return txs; },
-  };
-  const provider = new AnchorProvider(connection, wallet as never, { commitment: 'confirmed' });
+  // 2c — Build depositV3 instruction data manually (raw borsh, no Anchor/BN needed)
+  // Discriminator = first 8 bytes of SHA256("global:deposit_v3")
+  const discriminator = createHash('sha256').update('global:deposit_v3').digest().slice(0, 8);
 
-  // Use built-in minimal IDL — on-chain IDL may use different naming conventions
-  const program = new Program(SPOKE_POOL_IDL, provider);
+  const recipientBytes32   = evmAddressToBytes32(record.bridge.settlement_wallet);
+  const outputTokenBytes32 = evmAddressToBytes32(record.bridge.output_token_address);
+  const outputAmount       = BigInt(record.bridge.raw_output_amount);
 
-  // 2d — Prepare depositV3 arguments
-  const recipientBytes32     = evmAddressToBytes32(record.bridge.settlement_wallet);
-  const outputTokenBytes32   = evmAddressToBytes32(record.bridge.output_token_address);
-  const exclusiveRelayerZero = new Uint8Array(32);
+  const u64LE = (n: bigint)  => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
+  const u32LE = (n: number)  => { const b = Buffer.alloc(4); b.writeUInt32LE(n);    return b; };
 
-  const outputAmount = BigInt(record.bridge.raw_output_amount);
-  const now          = Math.floor(Date.now() / 1000);
+  const data = Buffer.concat([
+    discriminator,                                               // [u8; 8]  anchor discriminator
+    tempKeypair.publicKey.toBuffer(),                           // depositor:           PublicKey
+    Buffer.from(recipientBytes32),                              // recipient:           [u8; 32]
+    inputMint.toBuffer(),                                       // inputToken:          PublicKey
+    Buffer.from(outputTokenBytes32),                            // outputToken:         [u8; 32]
+    u64LE(actualInputAmount),                                   // inputAmount:         u64
+    u64LE(outputAmount),                                        // outputAmount:        u64
+    u64LE(BigInt(record.bridge.destination_chain_id)),          // destinationChainId:  u64
+    Buffer.alloc(32),                                           // exclusiveRelayer:    [u8; 32] (zero)
+    u32LE(record.bridge.quote_timestamp),                       // quoteTimestamp:      u32
+    u32LE(record.bridge.fill_deadline),                         // fillDeadline:        u32
+    u32LE(0),                                                   // exclusivityDeadline: u32
+    u32LE(0),                                                   // message length:      u32 (empty bytes)
+  ]);
 
   console.error('[monitor-solana-deposit] Stage 2b: Calling depositV3 on Across SpokePool...');
 
-  const depositTx = await (program.methods as unknown as {
-    depositV3: (
-      depositor: PublicKey, recipient: Buffer, inputToken: PublicKey, outputToken: Buffer,
-      inputAmount: BN, outputAmount: BN, destinationChainId: BN, exclusiveRelayer: Buffer,
-      quoteTimestamp: number, fillDeadline: number, exclusivityDeadline: number, message: Buffer,
-    ) => { accounts: (a: object) => { transaction: () => Promise<Transaction> } }
-  }).depositV3(
-    tempKeypair.publicKey,
-    Buffer.from(recipientBytes32),
-    inputMint,
-    Buffer.from(outputTokenBytes32),
-    new BN(actualInputAmount.toString()),
-    new BN(outputAmount.toString()),
-    new BN(record.bridge.destination_chain_id),
-    Buffer.from(exclusiveRelayerZero),
-    record.bridge.quote_timestamp,
-    record.bridge.fill_deadline,
-    0, // exclusivityDeadline
-    Buffer.alloc(0), // empty message
-  ).accounts({
-    state:               statePDA,
-    route:               routePDA,
-    signer:              tempKeypair.publicKey,
-    userTokenAccount:    depositATA,
-    relayerTokenAccount: vaultATA,
-    mint:                inputMint,
-    tokenProgram:        TOKEN_PROGRAM_ID,
-    program:             programId,
-    eventAuthority,
-    systemProgram:       SystemProgram.programId,
-  }).transaction();
+  const ix = new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: statePDA,               isSigner: false, isWritable: true  },
+      { pubkey: routePDA,               isSigner: false, isWritable: false },
+      { pubkey: tempKeypair.publicKey,  isSigner: true,  isWritable: true  },
+      { pubkey: depositATA,             isSigner: false, isWritable: true  },
+      { pubkey: vaultATA,               isSigner: false, isWritable: true  },
+      { pubkey: inputMint,              isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID,       isSigner: false, isWritable: false },
+      { pubkey: programId,              isSigner: false, isWritable: false },
+      { pubkey: eventAuthority,         isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
 
+  const depositTx = new Transaction().add(ix);
   const txSig = await sendAndPollConfirm(connection, depositTx, [tempKeypair]);
-
   console.error(`[monitor-solana-deposit] depositV3 tx: ${txSig}`);
   return txSig;
 }
