@@ -37,7 +37,7 @@ export const config = {
     // Conservative relay fee estimate: 0.12% of amount (LP fee ~0.04% + gas buffer)
     estimatedRelayFeePct: parseFloat(process.env.ACROSS_RELAY_FEE_PCT || '0.0012'),
     // Minimum fee buffer in token base units (covers gas on destination)
-    minRelayFeeBuffer: parseFloat(process.env.ACROSS_MIN_FEE_BUFFER || '0.50'),
+    minRelayFeeBuffer: parseFloat(process.env.ACROSS_MIN_FEE_BUFFER || '0.10'),
     // How far ahead to set fillDeadline (seconds) — 6 hours is standard
     fillDeadlineOffsetSec: 6 * 60 * 60,
   },
