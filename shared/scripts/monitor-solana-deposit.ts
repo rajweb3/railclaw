@@ -1,5 +1,4 @@
 import { readFileSync, writeFileSync } from 'fs';
-import { createHash } from 'crypto';
 import {
   Connection,
   Keypair,
@@ -12,8 +11,9 @@ import {
 import {
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
+  createApproveCheckedInstruction,
 } from '@solana/spl-token';
-import { JsonRpcProvider, Interface, zeroPadValue } from 'ethers';
+import { JsonRpcProvider, Interface, zeroPadValue, keccak256 } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { decrypt } from './lib/crypto-utils.js';
 
@@ -111,26 +111,25 @@ async function sendAndPollConfirm(
   return sig;
 }
 
-// Pad a hex EVM address to a 32-byte Uint8Array
+// Pad a hex EVM address to a 32-byte Uint8Array (left-padded, matching EVM abi.encode)
 function evmAddressToBytes32(address: string): Uint8Array {
   const clean = address.startsWith('0x') ? address.slice(2) : address;
   const padded = clean.padStart(64, '0');
   return Buffer.from(padded, 'hex');
 }
 
-// Derive Across SpokePool PDAs
-function deriveSpoolPDAs(programId: PublicKey, inputTokenMint: PublicKey, destinationChainId: number) {
-  // State PDA: seeds = ["state", seed(u64 LE)] — seed 0 for initial deployment
-  const [statePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from('state'), Buffer.alloc(8)], // seed = 0 as 8-byte LE
-    programId,
-  );
+// Encode a u64 as a 32-byte big-endian buffer (EVM uint256 style)
+function u64ToBEBytes32(n: bigint): Buffer {
+  const buf = Buffer.alloc(32);
+  buf.writeBigUInt64BE(n, 24); // 8 bytes at offset 24 (last 8 bytes)
+  return buf;
+}
 
-  // Route PDA: seeds = ["routes", input_token_mint, dest_chain_id(u64 LE)]
-  const chainIdBuf = Buffer.alloc(8);
-  chainIdBuf.writeBigUInt64LE(BigInt(destinationChainId));
-  const [routePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from('routes'), inputTokenMint.toBuffer(), chainIdBuf],
+// Derive Across SpokePool static PDAs (state, event_authority, vault)
+function deriveSpoolPDAs(programId: PublicKey, inputTokenMint: PublicKey) {
+  // State PDA: seeds = ["state", 0 as u64 LE] — seed 0 for mainnet deployment
+  const [statePDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from('state'), Buffer.alloc(8)],
     programId,
   );
 
@@ -144,11 +143,60 @@ function deriveSpoolPDAs(programId: PublicKey, inputTokenMint: PublicKey, destin
   const vaultATA = getAssociatedTokenAddressSync(
     inputTokenMint,
     statePDA,
-    true,  // allowOwnerOffCurve = true for PDA
+    true,            // allowOwnerOffCurve = true for PDA
     TOKEN_PROGRAM_ID,
   );
 
-  return { statePDA, routePDA, eventAuthority, vaultATA };
+  return { statePDA, eventAuthority, vaultATA };
+}
+
+// Derive the deposit delegate PDA.
+// Seeds: ["delegate", keccak256(borsh_serialize(deposit_params))]
+// The on-chain program uses this PDA as authority to pull tokens from depositor's ATA.
+function computeDelegatePDA(
+  programId:           PublicKey,
+  depositor:           PublicKey,
+  recipient:           Uint8Array,   // 32 bytes (EVM addr padded)
+  inputToken:          PublicKey,
+  outputToken:         Uint8Array,   // 32 bytes (EVM addr padded)
+  inputAmount:         bigint,
+  outputAmount:        Uint8Array,   // 32 bytes big-endian
+  destinationChainId:  bigint,
+  exclusiveRelayer:    Uint8Array,   // 32 bytes (zeros = no exclusivity)
+  quoteTimestamp:      number,
+  fillDeadline:        number,
+  exclusivityParameter: number,
+  message:             Uint8Array,
+): PublicKey {
+  // Borsh serialization of DepositSeedData struct (matches on-chain schema)
+  const u64LE = (n: bigint) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
+  const u32LE = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32LE(n);    return b; };
+
+  const serialized = Buffer.concat([
+    depositor.toBuffer(),           // [32]  depositor
+    Buffer.from(recipient),         // [32]  recipient
+    inputToken.toBuffer(),          // [32]  inputToken
+    Buffer.from(outputToken),       // [32]  outputToken
+    u64LE(inputAmount),             // u64   inputAmount
+    Buffer.from(outputAmount),      // [32]  outputAmount (big-endian u256)
+    u64LE(destinationChainId),      // u64   destinationChainId
+    Buffer.from(exclusiveRelayer),  // [32]  exclusiveRelayer
+    u32LE(quoteTimestamp),          // u32   quoteTimestamp
+    u32LE(fillDeadline),            // u32   fillDeadline
+    u32LE(exclusivityParameter),    // u32   exclusivityParameter
+    u32LE(message.length),          // u32   message length prefix
+    Buffer.from(message),           // [u8]  message bytes
+  ]);
+
+  // keccak256 hash → PDA seed
+  const hashHex   = keccak256(serialized);
+  const hashBytes = Buffer.from(hashHex.slice(2), 'hex');
+
+  const [delegatePDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from('delegate'), hashBytes],
+    programId,
+  );
+  return delegatePDA;
 }
 
 // Stage 1: Poll Solana for USDC balance at deposit ATA
@@ -229,62 +277,102 @@ async function callDepositV3(
     console.error('[monitor-solana-deposit] SOLANA_SOL_DISPENSER_KEY not set — temp wallet must have SOL already');
   }
 
-  // 2b — Derive PDAs
-  const { statePDA, routePDA, eventAuthority, vaultATA } = deriveSpoolPDAs(
+  // 2b — Derive static PDAs (state, vault, event_authority)
+  const { statePDA, eventAuthority, vaultATA } = deriveSpoolPDAs(programId, inputMint);
+
+  // 2c — Prepare deposit parameters
+  const recipientBytes32    = evmAddressToBytes32(record.bridge.settlement_wallet);
+  const outputTokenBytes32  = evmAddressToBytes32(record.bridge.output_token_address);
+  const outputAmount        = BigInt(record.bridge.raw_output_amount);
+  const outputAmountBuf     = u64ToBEBytes32(outputAmount);       // [u8; 32] big-endian
+  const exclusiveRelayer    = Buffer.alloc(32);                   // zeros = no exclusivity
+  const message             = Buffer.alloc(0);                    // empty
+  const quoteTimestamp      = record.bridge.quote_timestamp;
+  const fillDeadline        = record.bridge.fill_deadline;
+  const exclusivityParam    = 0;
+  const destinationChainId  = BigInt(record.bridge.destination_chain_id);
+
+  // 2d — Compute deposit delegate PDA (needed for approve + accounts list)
+  const delegatePDA = computeDelegatePDA(
     programId,
+    tempKeypair.publicKey,
+    recipientBytes32,
     inputMint,
-    record.bridge.destination_chain_id,
+    outputTokenBytes32,
+    actualInputAmount,
+    outputAmountBuf,
+    destinationChainId,
+    exclusiveRelayer,
+    quoteTimestamp,
+    fillDeadline,
+    exclusivityParam,
+    message,
   );
+  console.error(`[monitor-solana-deposit] Delegate PDA: ${delegatePDA.toString()}`);
 
-  // 2c — Build depositV3 instruction data manually (raw borsh, no Anchor/BN needed)
-  // Discriminator = first 8 bytes of SHA256("global:deposit_v3")
-  const discriminator = createHash('sha256').update('global:deposit_v3').digest().slice(0, 8);
+  // 2e — Approve delegate PDA to spend inputAmount from depositor's ATA
+  // (The deposit instruction pulls tokens via this delegate authority)
+  console.error('[monitor-solana-deposit] Stage 2b: Approving delegate...');
+  const approveTx = new Transaction().add(
+    createApproveCheckedInstruction(
+      depositATA,                  // source token account
+      inputMint,                   // mint
+      delegatePDA,                 // delegate (the PDA we computed)
+      tempKeypair.publicKey,       // owner of the source account
+      actualInputAmount,           // amount to approve
+      6,                           // USDC decimals
+    ),
+  );
+  const approveSig = await sendAndPollConfirm(connection, approveTx, [tempKeypair]);
+  console.error(`[monitor-solana-deposit] Approve tx: ${approveSig}`);
 
-  const recipientBytes32   = evmAddressToBytes32(record.bridge.settlement_wallet);
-  const outputTokenBytes32 = evmAddressToBytes32(record.bridge.output_token_address);
-  const outputAmount       = BigInt(record.bridge.raw_output_amount);
+  // 2f — Build deposit instruction (raw borsh — no Anchor/BN dependency)
+  // Discriminator: SHA256("global:deposit")[:8] = [242, 35, 198, 137, 82, 225, 242, 182]
+  const DEPOSIT_DISCRIMINATOR = Buffer.from([242, 35, 198, 137, 82, 225, 242, 182]);
+  const u64LE = (n: bigint) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
+  const u32LE = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32LE(n);    return b; };
 
-  const u64LE = (n: bigint)  => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
-  const u32LE = (n: number)  => { const b = Buffer.alloc(4); b.writeUInt32LE(n);    return b; };
-
-  const data = Buffer.concat([
-    discriminator,                                               // [u8; 8]  anchor discriminator
-    tempKeypair.publicKey.toBuffer(),                           // depositor:           PublicKey
-    Buffer.from(recipientBytes32),                              // recipient:           [u8; 32]
-    inputMint.toBuffer(),                                       // inputToken:          PublicKey
-    Buffer.from(outputTokenBytes32),                            // outputToken:         [u8; 32]
-    u64LE(actualInputAmount),                                   // inputAmount:         u64
-    u64LE(outputAmount),                                        // outputAmount:        u64
-    u64LE(BigInt(record.bridge.destination_chain_id)),          // destinationChainId:  u64
-    Buffer.alloc(32),                                           // exclusiveRelayer:    [u8; 32] (zero)
-    u32LE(record.bridge.quote_timestamp),                       // quoteTimestamp:      u32
-    u32LE(record.bridge.fill_deadline),                         // fillDeadline:        u32
-    u32LE(0),                                                   // exclusivityDeadline: u32
-    u32LE(0),                                                   // message length:      u32 (empty bytes)
+  const depositData = Buffer.concat([
+    DEPOSIT_DISCRIMINATOR,
+    tempKeypair.publicKey.toBuffer(),          // depositor:            pubkey [32]
+    Buffer.from(recipientBytes32),             // recipient:            pubkey [32] (EVM addr padded)
+    inputMint.toBuffer(),                      // input_token:          pubkey [32]
+    Buffer.from(outputTokenBytes32),           // output_token:         pubkey [32] (EVM addr padded)
+    u64LE(actualInputAmount),                  // input_amount:         u64
+    outputAmountBuf,                           // output_amount:        [u8; 32] big-endian
+    u64LE(destinationChainId),                 // destination_chain_id: u64
+    Buffer.from(exclusiveRelayer),             // exclusive_relayer:    pubkey [32] (zeros)
+    u32LE(quoteTimestamp),                     // quote_timestamp:      u32
+    u32LE(fillDeadline),                       // fill_deadline:        u32
+    u32LE(exclusivityParam),                   // exclusivity_parameter:u32
+    u32LE(0),                                  // message: borsh bytes length prefix (0 = empty)
+    // (no message bytes follow — empty)
   ]);
 
-  console.error('[monitor-solana-deposit] Stage 2b: Calling depositV3 on Across SpokePool...');
+  const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
-  const ix = new TransactionInstruction({
+  const depositIx = new TransactionInstruction({
     programId,
     keys: [
-      { pubkey: statePDA,               isSigner: false, isWritable: true  },
-      { pubkey: routePDA,               isSigner: false, isWritable: false },
-      { pubkey: tempKeypair.publicKey,  isSigner: true,  isWritable: true  },
-      { pubkey: depositATA,             isSigner: false, isWritable: true  },
-      { pubkey: vaultATA,               isSigner: false, isWritable: true  },
-      { pubkey: inputMint,              isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID,       isSigner: false, isWritable: false },
-      { pubkey: programId,              isSigner: false, isWritable: false },
-      { pubkey: eventAuthority,         isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: tempKeypair.publicKey,       isSigner: true,  isWritable: true  }, // signer
+      { pubkey: statePDA,                    isSigner: false, isWritable: true  }, // state
+      { pubkey: delegatePDA,                 isSigner: false, isWritable: false }, // delegate
+      { pubkey: depositATA,                  isSigner: false, isWritable: true  }, // depositor_token_account
+      { pubkey: vaultATA,                    isSigner: false, isWritable: true  }, // vault
+      { pubkey: inputMint,                   isSigner: false, isWritable: false }, // mint
+      { pubkey: TOKEN_PROGRAM_ID,            isSigner: false, isWritable: false }, // token_program
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // associated_token_program
+      { pubkey: SystemProgram.programId,     isSigner: false, isWritable: false }, // system_program
+      { pubkey: eventAuthority,              isSigner: false, isWritable: false }, // event_authority
+      { pubkey: programId,                   isSigner: false, isWritable: false }, // program (self-reference for CPI events)
     ],
-    data,
+    data: depositData,
   });
 
-  const depositTx = new Transaction().add(ix);
+  console.error('[monitor-solana-deposit] Stage 2c: Calling deposit on Across SpokePool...');
+  const depositTx = new Transaction().add(depositIx);
   const txSig = await sendAndPollConfirm(connection, depositTx, [tempKeypair]);
-  console.error(`[monitor-solana-deposit] depositV3 tx: ${txSig}`);
+  console.error(`[monitor-solana-deposit] deposit tx: ${txSig}`);
   return txSig;
 }
 
