@@ -570,7 +570,7 @@ async function main() {
   // Stage 3: Wait for EVM fill
   let fillResult: { txHash: string; confirmations: number };
   try {
-    fillResult = await waitForEVMFill(record, deadline, pollMs, resumeStage3 ? stage3Lookback : 5);
+    fillResult = await waitForEVMFill(record, deadline, pollMs, resumeStage3 ? stage3Lookback : 150);
   } catch (err) {
     record.status = 'expired';
     (record as Record<string, unknown>).expired_at = new Date().toISOString();
