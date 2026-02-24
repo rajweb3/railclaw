@@ -10,9 +10,7 @@ import {
 } from '@solana/web3.js';
 import {
   getAssociatedTokenAddressSync,
-  getAccount,
   TOKEN_PROGRAM_ID,
-  createTransferInstruction,
 } from '@solana/spl-token';
 import { AnchorProvider, Program, BN, type Idl } from '@coral-xyz/anchor';
 import { JsonRpcProvider, Interface, zeroPadValue } from 'ethers';
@@ -181,17 +179,37 @@ async function waitForSolanaDeposit(
 
   const slippage = (expectedRaw * 100n) / 10000n; // 1%
   const minExpected = expectedRaw - slippage;
+  let errorCount = 0;
 
   while (Date.now() < deadline) {
     try {
-      const acct = await getAccount(connection, depositATA, 'confirmed', TOKEN_PROGRAM_ID);
-      const balance = acct.amount;
+      // Use getTokenAccountBalance (direct RPC) instead of getAccount (SPL helper)
+      // — simpler call, more reliable against rate-limited public RPCs
+      const balResp = await connection.getTokenAccountBalance(depositATA, 'confirmed');
+      const balance = BigInt(balResp.value.amount);
+      errorCount = 0;
+      if (balance > 0n) {
+        console.error(`[monitor-solana-deposit] Stage 1: Balance = ${balance} raw units (need ${minExpected})`);
+      }
       if (balance >= minExpected) {
         console.error(`[monitor-solana-deposit] USDC deposit detected: ${balance.toString()} raw units`);
         return balance;
       }
-    } catch {
-      // Account doesn't exist yet — user hasn't sent yet
+    } catch (err) {
+      errorCount++;
+      const errStr = String(err);
+      // Log first occurrence and every 10th after to avoid spam
+      if (errorCount === 1 || errorCount % 10 === 0) {
+        const isNotFound = errStr.includes('could not find account') ||
+          errStr.includes('AccountNotFound') ||
+          errStr.includes('TokenAccountNotFound') ||
+          errStr.includes('Invalid param');
+        if (isNotFound) {
+          console.error(`[monitor-solana-deposit] Stage 1: ATA not yet created (poll #${errorCount}) — waiting for user deposit`);
+        } else {
+          console.error(`[monitor-solana-deposit] Stage 1 RPC error (poll #${errorCount}): ${errStr}`);
+        }
+      }
     }
     await sleep(pollMs);
   }
