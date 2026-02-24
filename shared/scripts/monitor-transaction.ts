@@ -18,7 +18,7 @@
  *   - Exits on confirmation or timeout
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { ethers } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
@@ -48,6 +48,9 @@ if (!rpcUrl) {
 const tokenContract = config.tokens[chain]?.[token];
 const TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
 const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+// Free-tier RPCs (Alchemy, Infura) cap eth_getLogs to 10 blocks per request
+const MAX_BLOCK_RANGE = 10;
 
 const startTime = Date.now();
 const timeoutMs = timeoutSeconds * 1000;
@@ -110,19 +113,24 @@ async function checkForTransfer(): Promise<{ found: boolean; txHash?: string; bl
     const decimals = await getTokenDecimals(tokenContract);
     const expectedAmount = ethers.parseUnits(amount.toString(), decimals);
     const minAmount = (expectedAmount * 99n) / 100n; // 1% slippage
+    const recipientTopic = ethers.zeroPadValue(wallet, 32);
 
-    const logs = await provider.getLogs({
-      address: tokenContract,
-      topics: [TRANSFER_TOPIC, null, ethers.zeroPadValue(wallet, 32)],
-      fromBlock,
-      toBlock: currentBlock,
-    });
+    // Chunk getLogs into MAX_BLOCK_RANGE batches (free-tier RPC limit)
+    for (let chunkStart = fromBlock; chunkStart <= currentBlock; chunkStart += MAX_BLOCK_RANGE) {
+      const chunkEnd = Math.min(chunkStart + MAX_BLOCK_RANGE - 1, currentBlock);
+      const logs = await provider.getLogs({
+        address: tokenContract,
+        topics: [TRANSFER_TOPIC, null, recipientTopic],
+        fromBlock: chunkStart,
+        toBlock: chunkEnd,
+      });
 
-    for (const log of logs) {
-      const transferAmount = BigInt(log.data);
-      if (transferAmount >= minAmount) {
-        lastCheckedBlock = currentBlock;
-        return { found: true, txHash: log.transactionHash, blockNumber: log.blockNumber };
+      for (const log of logs) {
+        const transferAmount = BigInt(log.data);
+        if (transferAmount >= minAmount) {
+          lastCheckedBlock = currentBlock;
+          return { found: true, txHash: log.transactionHash, blockNumber: log.blockNumber };
+        }
       }
     }
   }
@@ -157,7 +165,30 @@ async function main() {
         const finalConfirmations = await waitForConfirmations(result.txHash, result.blockNumber);
 
         if (finalConfirmations >= requiredConfirmations) {
+          const confirmedAt = new Date().toISOString();
           updatePaymentRecord('confirmed', result.txHash, finalConfirmations);
+
+          // Write notification for product bot to pick up on next request
+          try {
+            const notifDir = resolveDataPath('notifications');
+            mkdirSync(notifDir, { recursive: true });
+            writeFileSync(
+              join(notifDir, `${paymentId}.json`),
+              JSON.stringify({
+                type: 'direct_confirmed',
+                payment_id: paymentId,
+                tx_hash: result.txHash,
+                confirmations: finalConfirmations,
+                chain,
+                token,
+                amount,
+                confirmed_at: confirmedAt,
+              }, null, 2)
+            );
+          } catch (err: any) {
+            console.error(`Warning: Could not write notification: ${err.message}`);
+          }
+
           console.log(
             JSON.stringify({
               success: true,
@@ -168,7 +199,7 @@ async function main() {
               token,
               amount,
               confirmations: finalConfirmations,
-              confirmed_at: new Date().toISOString(),
+              confirmed_at: confirmedAt,
             })
           );
           process.exit(0);

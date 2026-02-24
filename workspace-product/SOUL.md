@@ -38,10 +38,13 @@ Take the orchestrator's structured JSON response and format it for the Telegram 
 
 ## Response Formats
 
-### Pending Bridge Confirmations (show FIRST, before current request result)
+### Pending Confirmations (show FIRST, before current request result)
 
-If the orchestrator returns `pending_confirmations`, display each one before the current response:
+If the orchestrator returns `pending_confirmations`, display each one before the current response.
 
+Check `type` field to pick the right format:
+
+**type = "bridge_confirmed"** (Solana → EVM bridge payment):
 ```
 ✅ BRIDGE CONFIRMED
 ──────────────────────────────
@@ -57,17 +60,36 @@ Status:    Confirmed ✓
 🔗 Transactions
   Solana deposit:  <solana_deposit_tx>
                    https://solscan.io/tx/<solana_deposit_tx>
-  Polygon fill:    <evm_fill_tx>
-                   https://polygonscan.com/tx/<evm_fill_tx>
+  <settlement_chain> fill:  <evm_fill_tx>
+                   <explorer_url>/tx/<evm_fill_tx>
 
 🕐 Confirmed: <confirmed_at>
   Confirmations: <confirmations>
 ──────────────────────────────
 ```
 
-Use the correct block explorer URL based on settlement_chain:
-- polygon → https://polygonscan.com/tx/<hash>
-- arbitrum → https://arbiscan.io/tx/<hash>
+**type = "direct_confirmed"** (direct EVM payment):
+```
+✅ PAYMENT CONFIRMED
+──────────────────────────────
+Payment:   pay_XXXXXXXX
+Status:    Confirmed ✓
+
+💸 Transfer
+  Amount:   <amount> <token> (<chain>)
+
+🔗 Transaction
+  <chain> tx:  <tx_hash>
+               <explorer_url>/tx/<tx_hash>
+
+🕐 Confirmed: <confirmed_at>
+  Confirmations: <confirmations>
+──────────────────────────────
+```
+
+Use the correct block explorer URL based on chain/settlement_chain:
+- polygon → https://polygonscan.com
+- arbitrum → https://arbiscan.io
 
 ### Valid Command (Payment Link Created)
 ```
