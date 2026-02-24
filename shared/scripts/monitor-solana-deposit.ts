@@ -5,7 +5,6 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
-  sendAndConfirmTransaction,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
@@ -127,6 +126,33 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Confirm a transaction by polling getSignatureStatuses — no WebSocket needed
+async function pollConfirm(connection: Connection, sig: string, maxWaitMs = 120_000): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    const { value: [status] } = await connection.getSignatureStatuses([sig]);
+    if (status?.err) throw new Error(`Transaction ${sig} failed: ${JSON.stringify(status.err)}`);
+    if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return;
+  }
+  throw new Error(`Transaction ${sig} not confirmed within ${maxWaitMs / 1000}s`);
+}
+
+// Send a transaction and confirm via polling (no WebSocket subscriptions)
+async function sendAndPollConfirm(
+  connection: Connection,
+  transaction: Transaction,
+  signers: Keypair[],
+): Promise<string> {
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = signers[0].publicKey;
+  transaction.sign(...signers);
+  const sig = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: false });
+  await pollConfirm(connection, sig);
+  return sig;
+}
+
 // Pad a hex EVM address to a 32-byte Uint8Array
 function evmAddressToBytes32(address: string): Uint8Array {
   const clean = address.startsWith('0x') ? address.slice(2) : address;
@@ -241,8 +267,8 @@ async function callDepositV3(
         lamports:   config.sol.fundAmountLamports,
       }),
     );
-    await sendAndConfirmTransaction(connection, fundTx, [dispenserKeypair], { commitment: 'confirmed' });
-    console.error(`[monitor-solana-deposit] Funded ${config.sol.fundAmountLamports / LAMPORTS_PER_SOL} SOL`);
+    const fundSig = await sendAndPollConfirm(connection, fundTx, [dispenserKeypair]);
+    console.error(`[monitor-solana-deposit] Funded ${config.sol.fundAmountLamports / LAMPORTS_PER_SOL} SOL (tx: ${fundSig})`);
   } else {
     console.error('[monitor-solana-deposit] SOLANA_SOL_DISPENSER_KEY not set — temp wallet must have SOL already');
   }
@@ -286,12 +312,12 @@ async function callDepositV3(
 
   console.error('[monitor-solana-deposit] Stage 2b: Calling depositV3 on Across SpokePool...');
 
-  const txSig = await (program.methods as unknown as {
+  const depositTx = await (program.methods as unknown as {
     depositV3: (
       depositor: PublicKey, recipient: Buffer, inputToken: PublicKey, outputToken: Buffer,
       inputAmount: BN, outputAmount: BN, destinationChainId: BN, exclusiveRelayer: Buffer,
       quoteTimestamp: number, fillDeadline: number, exclusivityDeadline: number, message: Buffer,
-    ) => { accounts: (a: object) => { rpc: () => Promise<string> } }
+    ) => { accounts: (a: object) => { transaction: () => Promise<Transaction> } }
   }).depositV3(
     tempKeypair.publicKey,
     Buffer.from(recipientBytes32),
@@ -316,7 +342,9 @@ async function callDepositV3(
     program:             programId,
     eventAuthority,
     systemProgram:       SystemProgram.programId,
-  }).rpc();
+  }).transaction();
+
+  const txSig = await sendAndPollConfirm(connection, depositTx, [tempKeypair]);
 
   console.error(`[monitor-solana-deposit] depositV3 tx: ${txSig}`);
   return txSig;
@@ -414,8 +442,7 @@ async function main() {
     process.exit(1);
   }
 
-  const wsEndpoint = config.rpc.solana.replace(/^https?:\/\//, 'wss://');
-  const connection = new Connection(config.rpc.solana, { commitment: 'confirmed', wsEndpoint });
+  const connection = new Connection(config.rpc.solana, 'confirmed');
   const depositATA = new PublicKey(record.bridge.deposit_address);
   const expectedRaw = BigInt(record.bridge.raw_input_amount);
 
