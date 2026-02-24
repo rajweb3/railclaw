@@ -383,6 +383,7 @@ async function waitForEVMFill(
   record: PendingRecord,
   deadline: number,
   pollMs: number,
+  lookbackBlocks = 5,
 ): Promise<{ txHash: string; confirmations: number }> {
   const settlementChain = record.settlement_chain;
   const rpcUrl          = config.rpc[settlementChain];
@@ -406,7 +407,7 @@ async function waitForEVMFill(
   let fromBlock: number;
   try {
     const current = await provider.getBlockNumber();
-    fromBlock = Math.max(0, current - 5); // small lookback in case fill arrived during Stage 2
+    fromBlock = Math.max(0, current - lookbackBlocks);
   } catch {
     fromBlock = 0;
   }
@@ -476,6 +477,9 @@ async function main() {
   const settlementChain = args['settlement-chain'];
   const timeoutSec      = parseInt(args['timeout']       || '7200');
   const pollIntervalSec = parseInt(args['poll-interval'] || '30');
+  const resumeStage3    = args['resume-stage3'] === 'true';
+  // How many blocks back to look when resuming Stage 3 (covers fills that happened while monitor was down)
+  const stage3Lookback  = parseInt(args['stage3-lookback'] || '2000');
 
   if (!paymentId || !settlementChain) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
@@ -491,59 +495,66 @@ async function main() {
     process.exit(1);
   }
 
-  const connection = new Connection(config.rpc.solana, 'confirmed');
-  const depositATA = new PublicKey(record.bridge.deposit_address);
-  const expectedRaw = BigInt(record.bridge.raw_input_amount);
-
   const deadline = Date.now() + timeoutSec * 1000;
   const pollMs   = pollIntervalSec * 1000;
 
-  // Stage 1: Wait for USDC deposit on Solana
-  const actualInputAmount = await waitForSolanaDeposit(
-    connection, depositATA, expectedRaw, deadline, pollMs, paymentId,
-  );
+  // --resume-stage3: skip Stage 1 + 2, jump straight to EVM fill detection.
+  // Use this when the monitor was restarted after the Solana deposit + bridge call
+  // already completed (record.status = "bridging").
+  if (resumeStage3) {
+    console.error(`[monitor-solana-deposit] Resuming from Stage 3 (lookback=${stage3Lookback} blocks)`);
+  } else {
+    const connection = new Connection(config.rpc.solana, 'confirmed');
+    const depositATA = new PublicKey(record.bridge.deposit_address);
+    const expectedRaw = BigInt(record.bridge.raw_input_amount);
 
-  if (actualInputAmount === 0n) {
-    record.status = 'expired';
-    (record as Record<string, unknown>).expired_at = new Date().toISOString();
+    // Stage 1: Wait for USDC deposit on Solana
+    const actualInputAmount = await waitForSolanaDeposit(
+      connection, depositATA, expectedRaw, deadline, pollMs, paymentId,
+    );
+
+    if (actualInputAmount === 0n) {
+      record.status = 'expired';
+      (record as Record<string, unknown>).expired_at = new Date().toISOString();
+      writeFileSync(recordPath, JSON.stringify(record, null, 2));
+      console.log(JSON.stringify({
+        success: false, status: 'expired', payment_id: paymentId,
+        reason: 'No USDC deposit received within timeout',
+      }));
+      return;
+    }
+
+    // Update record: deposit received
+    record.status = 'deposit_received';
+    (record as Record<string, unknown>).deposit_received_at = new Date().toISOString();
     writeFileSync(recordPath, JSON.stringify(record, null, 2));
-    console.log(JSON.stringify({
-      success: false, status: 'expired', payment_id: paymentId,
-      reason: 'No USDC deposit received within timeout',
-    }));
-    return;
+
+    // Decrypt temp private key
+    const secretKeyHex = decrypt(record.bridge.temp_private_key_enc, config.encryption.walletKey);
+    const tempKeypair  = Keypair.fromSecretKey(Buffer.from(secretKeyHex, 'hex'));
+
+    // Stage 2: Call depositV3 on Across SpokePool
+    let depositTxSig: string;
+    try {
+      depositTxSig = await callDepositV3(connection, tempKeypair, record, actualInputAmount);
+    } catch (err) {
+      console.log(JSON.stringify({
+        success: false, status: 'error', payment_id: paymentId,
+        reason: `depositV3 failed: ${String(err)}`,
+      }));
+      process.exit(1);
+    }
+
+    record.status = 'bridging';
+    (record as Record<string, unknown>).deposit_tx_sig = depositTxSig;
+    (record as Record<string, unknown>).bridging_at    = new Date().toISOString();
+    writeFileSync(recordPath, JSON.stringify(record, null, 2));
   }
-
-  // Update record: deposit received
-  record.status = 'deposit_received';
-  (record as Record<string, unknown>).deposit_received_at = new Date().toISOString();
-  writeFileSync(recordPath, JSON.stringify(record, null, 2));
-
-  // Decrypt temp private key
-  const secretKeyHex = decrypt(record.bridge.temp_private_key_enc, config.encryption.walletKey);
-  const tempKeypair  = Keypair.fromSecretKey(Buffer.from(secretKeyHex, 'hex'));
-
-  // Stage 2: Call depositV3 on Across SpokePool
-  let depositTxSig: string;
-  try {
-    depositTxSig = await callDepositV3(connection, tempKeypair, record, actualInputAmount);
-  } catch (err) {
-    console.log(JSON.stringify({
-      success: false, status: 'error', payment_id: paymentId,
-      reason: `depositV3 failed: ${String(err)}`,
-    }));
-    process.exit(1);
-  }
-
-  record.status = 'bridging';
-  (record as Record<string, unknown>).deposit_tx_sig = depositTxSig;
-  (record as Record<string, unknown>).bridging_at    = new Date().toISOString();
-  writeFileSync(recordPath, JSON.stringify(record, null, 2));
 
   // Stage 3: Wait for EVM fill
   let fillResult: { txHash: string; confirmations: number };
   try {
-    fillResult = await waitForEVMFill(record, deadline, pollMs);
+    fillResult = await waitForEVMFill(record, deadline, pollMs, resumeStage3 ? stage3Lookback : 5);
   } catch (err) {
     record.status = 'expired';
     (record as Record<string, unknown>).expired_at = new Date().toISOString();
