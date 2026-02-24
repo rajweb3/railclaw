@@ -458,6 +458,8 @@ async function waitForEVMFill(
           }
         }
         chunkStart = chunkEnd + 1;
+        // Brief pause between chunks to avoid hitting RPC rate limits
+        if (chunkStart <= safeToBlock) await sleep(200);
       }
 
       fromBlock = safeToBlock + 1;
