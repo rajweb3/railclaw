@@ -67,7 +67,7 @@ The output contains `bridge_instructions.deposit_address` — the Solana address
 
 ```
 Run this command and return immediately (it starts a background process):
-nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
 
@@ -88,7 +88,7 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token
 
 ```
 Run this command and return immediately (it starts a background process):
-nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
 
