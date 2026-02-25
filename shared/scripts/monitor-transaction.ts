@@ -261,6 +261,15 @@ async function main() {
     const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
     if (chatId && botToken) {
       try {
+        // Read record for business name and created_at
+        let businessName = '';
+        let createdAt = '';
+        try {
+          const rec = JSON.parse(readFileSync(join(resolveDataPath('pending'), `${paymentId}.json`), 'utf-8'));
+          businessName = rec.business_name ?? '';
+          createdAt = rec.created_at ?? '';
+        } catch { /* non-critical */ }
+
         const explorerBase: Record<string, string> = {
           polygon: 'https://polygonscan.com/tx',
           arbitrum: 'https://arbiscan.io/tx',
@@ -270,10 +279,15 @@ async function main() {
           `✅ <b>PAYMENT CONFIRMED</b>\n` +
           `──────────────────────────────\n` +
           `Payment:   <code>${paymentId}</code>\n` +
-          `Status:    Confirmed ✓\n\n` +
+          `Status:    Confirmed ✓\n` +
+          (businessName ? `Business:  ${businessName}\n` : '') +
+          `\n` +
           `💸 <b>Transfer</b>\n` +
-          `Received:  <b>${amount} ${token}</b> (${chain})\n` +
-          `To:        <code>${wallet}</code>\n\n` +
+          `Received:  <b>${amount} ${token}</b>\n` +
+          `Chain:     ${chain}\n` +
+          `To:        <code>${wallet}</code>\n` +
+          (createdAt ? `Requested: ${createdAt}\n` : '') +
+          `\n` +
           `🔗 <b>Transaction</b>\n` +
           `TX:        <code>${txHash}</code>\n` +
           `${explorer}/${txHash}\n\n` +
