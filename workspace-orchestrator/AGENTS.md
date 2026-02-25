@@ -67,9 +67,11 @@ The output contains `bridge_instructions.deposit_address` — the Solana address
 
 ```
 Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 --chat-id "[telegram_chat_id]" >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
+
+Once you have the PID, sub-agent 2 is done — do not wait further.
 
 Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 
@@ -87,9 +89,11 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token
 
 ```
 Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 --chat-id "[telegram_chat_id]" >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
+
+Once you have the PID, sub-agent 2 is done — do not wait further.
 
 Return `status: "executed"` with the payment link from Sub-Agent 1.
 
@@ -139,4 +143,5 @@ Append to `memory/YYYY-MM-DD.md`:
 - **NEVER read script files** — just run them via bash sub-agent
 - **BOUNDARY.md is the ONLY file you may read with the Read tool** (it is at workspace root)
 - Always spawn sub-agents for script execution — never run scripts in the main session
-- Sub-agents are ephemeral — one task, then they die
+- **Sub-agents are ephemeral — one task, one response, then they end.** Never reuse a sub-agent for a second task.
+- **You (orchestrator) end after Step 5.** Return your final JSON result to the product bot and stop. Do not remain active waiting for monitors or confirmations — those run independently in the background.
