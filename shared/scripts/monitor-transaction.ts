@@ -31,6 +31,7 @@ const chain = args['chain']?.toLowerCase();
 const token = args['token']?.toUpperCase();
 const amount = parseFloat(args['amount'] || '0');
 const wallet = args['wallet']?.toLowerCase();
+const chatId = args['chat-id'] || '';
 const requiredConfirmations = parseInt(args['confirmations'] || String(config.monitoring.requiredConfirmations));
 const timeoutSeconds = parseInt(args['timeout'] || String(config.monitoring.timeoutMs / 1000));
 const pollIntervalSeconds = parseInt(args['poll-interval'] || String(config.monitoring.pollIntervalMs / 1000));
@@ -254,6 +255,26 @@ async function main() {
       );
     } catch (err: any) {
       console.error(`Warning: Could not write notification: ${err.message}`);
+    }
+
+    // Send Telegram confirmation directly if we have chat_id
+    const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
+    if (chatId && botToken) {
+      try {
+        const text =
+          `✅ <b>Payment Confirmed!</b>\n\n` +
+          `💰 <b>${amount} ${token}</b> received on ${chain}\n` +
+          `📦 Payment: <code>${paymentId}</code>\n` +
+          `🔗 Tx: <code>${txHash}</code>`;
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+        });
+        console.error(`[monitor] Telegram confirmation sent to chat ${chatId}`);
+      } catch (err: any) {
+        console.error(`Warning: Could not send Telegram notification: ${err.message}`);
+      }
     }
 
     console.log(JSON.stringify({

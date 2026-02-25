@@ -647,6 +647,28 @@ async function main() {
     console.error(`[monitor-solana-deposit] Failed to write notification: ${String(err)}`);
   }
 
+  // Send Telegram confirmation directly if we have chat_id
+  const chatId = (record as Record<string, unknown>).telegram_chat_id as string | undefined;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
+  if (chatId && botToken) {
+    try {
+      const text =
+        `✅ <b>Bridge Payment Confirmed!</b>\n\n` +
+        `💰 <b>${humanOutput} ${record.token}</b> received on ${record.settlement_chain}\n` +
+        `📦 Payment: <code>${paymentId}</code>\n` +
+        `🔗 Fill tx: <code>${fillResult.txHash}</code>\n` +
+        `⛓ Route: Solana → ${record.settlement_chain}`;
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      });
+      console.error(`[monitor-solana-deposit] Telegram confirmation sent to chat ${chatId}`);
+    } catch (err) {
+      console.error(`[monitor-solana-deposit] Failed to send Telegram notification: ${String(err)}`);
+    }
+  }
+
   console.log(JSON.stringify({
     success:      true,
     status:       'confirmed',

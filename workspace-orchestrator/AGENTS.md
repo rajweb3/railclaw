@@ -6,7 +6,7 @@ You are spawned as a sub-agent by other agents (business-product, business-owner
 
 ### Step 1: Parse the Request
 
-Extract: `action`, `amount`, `token`, `chain`, `payment_id`, `source`
+Extract: `action`, `amount`, `token`, `chain`, `payment_id`, `source`, `chat_id`
 
 ### Step 1.5: Check Pending Bridge Notifications
 
@@ -58,7 +58,7 @@ Token/amount checks (both routes):
 
 ```
 Run this command and return the full JSON output:
-npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settlement-chain "[settlement_chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settlement-chain "[settlement_chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]" --chat-id "[chat_id]"
 ```
 
 The output contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
@@ -67,7 +67,7 @@ The output contains `bridge_instructions.deposit_address` — the Solana address
 
 ```
 Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 --chat-id "[chat_id]" >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
 
@@ -81,14 +81,14 @@ Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 
 ```
 Run this command and return the full JSON output:
-npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]" --chat-id "[chat_id]"
 ```
 
 **Sub-Agent 2 — start background monitor:**
 
 ```
 Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
+setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 --chat-id "[chat_id]" >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
 echo "Monitor PID: $!"
 ```
 

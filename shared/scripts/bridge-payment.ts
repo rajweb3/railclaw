@@ -60,6 +60,7 @@ async function main() {
   const wallet          = args['wallet'];
   const businessName    = args['business'];
   const businessId      = args['business-id'];
+  const chatId          = args['chat-id'] || '';
 
   if (!sourceChain || !settlementChain || !token || !amount || !wallet || !businessName || !businessId) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
@@ -140,6 +141,7 @@ async function main() {
     wallet,
     business_name:    businessName,
     business_id:      businessId,
+    telegram_chat_id: chatId,
     bridge: {
       provider:               'across',
       spoke_pool_source:      spokePoolSource,
