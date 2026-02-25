@@ -32,8 +32,6 @@ Read BOUNDARY.md. If `status` is not `active` or `business.onboarded` is not `tr
 - Return `{ "status": "not_ready", "reason": "Business not onboarded or inactive" }`
 - Stop
 
-Also extract from BOUNDARY.md:
-- `telegram_chat_id = business.telegram_chat_id` (use this in all script calls below)
 
 ### Step 3: Enforce Boundaries (for `create_payment_link`)
 
@@ -61,8 +59,7 @@ Token/amount checks (both routes):
 
 ```
 Run this command and return the full JSON output:
-npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settlement-chain "[settlement_chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]" --chat-id "[telegram_chat_id]"
-```
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settlement-chain "[settlement_chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"```
 
 The output contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
 
@@ -84,8 +81,7 @@ Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 
 ```
 Run this command and return the full JSON output:
-npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]" --chat-id "[telegram_chat_id]"
-```
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"```
 
 **Sub-Agent 2 — start background monitor:**
 

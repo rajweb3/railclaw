@@ -648,7 +648,7 @@ async function main() {
   }
 
   // Send Telegram confirmation directly if we have chat_id
-  const chatId = (record as Record<string, unknown>).telegram_chat_id as string | undefined;
+  const chatId = process.env.TELEGRAM_OWNER_CHAT_ID;
   const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
   if (chatId && botToken) {
     try {
