@@ -19,7 +19,7 @@
  *   - Exits on confirmation or timeout
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ethers, WebSocketProvider } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
@@ -99,14 +99,20 @@ async function waitForConfirmations(txHash: string, txBlock: number): Promise<nu
 async function waitForERC20Transfer(
   decimals: number,
   minAmount: bigint,
+  maxAmount: bigint,
+  paymentCreatedAt: number,
 ): Promise<{ txHash: string; blockNumber: number }> {
   const wsUrl = rpcUrl.replace('https://', 'wss://');
   const recipientTopic = ethers.zeroPadValue(wallet, 32);
 
-  // Phase 1: Historical check — catches transfers that arrived before monitor started
+  // Phase 1: Historical check — only look at blocks after payment was created
+  // to avoid matching unrelated transfers (e.g. bridge fills) to the same wallet.
+  // Polygon ≈ 2s/block; add a small buffer for safety.
   const currentBlock = await provider.getBlockNumber();
-  const fromBlock = Math.max(0, currentBlock - 150);
-  console.error(`[monitor] ERC-20 historical check blocks ${fromBlock}–${currentBlock}...`);
+  const secondsSinceCreation = Math.max(0, (Date.now() - paymentCreatedAt) / 1000);
+  const estimatedBlocksBack = Math.ceil(secondsSinceCreation / 2) + 10;
+  const fromBlock = Math.max(0, currentBlock - Math.min(estimatedBlocksBack, 150));
+  console.error(`[monitor] ERC-20 historical check blocks ${fromBlock}–${currentBlock} (payment age: ${Math.round(secondsSinceCreation)}s)...`);
 
   for (let cs = fromBlock; cs <= currentBlock; cs += MAX_BLOCK_RANGE) {
     const ce = Math.min(cs + MAX_BLOCK_RANGE - 1, currentBlock);
@@ -118,7 +124,8 @@ async function waitForERC20Transfer(
         toBlock: ce,
       });
       for (const log of logs) {
-        if (BigInt(log.data) >= minAmount) {
+        const transferred = BigInt(log.data);
+        if (transferred >= minAmount && transferred <= maxAmount) {
           console.error(`[monitor] Historical transfer found: ${log.transactionHash}`);
           return { txHash: log.transactionHash, blockNumber: log.blockNumber };
         }
@@ -147,7 +154,8 @@ async function waitForERC20Transfer(
     wsProvider.on(
       { address: tokenContract, topics: [TRANSFER_TOPIC, null, recipientTopic] },
       (log) => {
-        if (BigInt(log.data) < minAmount) return;
+        const transferred = BigInt(log.data);
+        if (transferred < minAmount || transferred > maxAmount) return;
         clearTimeout(timeoutHandle);
         wsProvider.destroy();
         console.error(`[monitor] WebSocket Transfer detected: ${log.transactionHash}`);
@@ -209,9 +217,16 @@ async function main() {
   } else if (tokenContract) {
     const decimals = await getTokenDecimals(tokenContract);
     const expectedAmount = ethers.parseUnits(amount.toString(), decimals);
-    const minAmount = (expectedAmount * 99n) / 100n; // 1% slippage
+    const minAmount = (expectedAmount * 99n) / 100n;   // 1% slippage tolerance
+    const maxAmount = (expectedAmount * 110n) / 100n;  // 10% overpayment tolerance
+    // Read payment creation time to bound historical getLogs check
+    let paymentCreatedAt = startTime;
     try {
-      const result = await waitForERC20Transfer(decimals, minAmount);
+      const rec = JSON.parse(readFileSync(join(resolveDataPath('pending'), `${paymentId}.json`), 'utf-8'));
+      if (rec.created_at) paymentCreatedAt = new Date(rec.created_at).getTime();
+    } catch { /* use startTime fallback */ }
+    try {
+      const result = await waitForERC20Transfer(decimals, minAmount, maxAmount, paymentCreatedAt);
       txHash = result.txHash;
       txBlock = result.blockNumber;
     } catch {
@@ -235,27 +250,6 @@ async function main() {
   if (finalConfirmations >= requiredConfirmations) {
     const confirmedAt = new Date().toISOString();
     updatePaymentRecord('confirmed', txHash, finalConfirmations);
-
-    // Write notification for product bot to pick up on next request
-    try {
-      const notifDir = resolveDataPath('notifications');
-      mkdirSync(notifDir, { recursive: true });
-      writeFileSync(
-        join(notifDir, `${paymentId}.json`),
-        JSON.stringify({
-          type: 'direct_confirmed',
-          payment_id: paymentId,
-          tx_hash: txHash,
-          confirmations: finalConfirmations,
-          chain,
-          token,
-          amount,
-          confirmed_at: confirmedAt,
-        }, null, 2)
-      );
-    } catch (err: any) {
-      console.error(`Warning: Could not write notification: ${err.message}`);
-    }
 
     // Send Telegram confirmation directly if we have chat_id
     const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
