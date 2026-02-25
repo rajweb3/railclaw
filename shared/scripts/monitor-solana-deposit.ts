@@ -35,26 +35,28 @@ import { decrypt } from './lib/crypto-utils.js';
  *   --poll-interval    30     (seconds, default 30)
  */
 
-// Minimal ABI for FilledV3Relay event on EVM SpokePool
+// Minimal ABI for FilledRelay event on EVM SpokePool (Across V3 non-EVM / bytes32 format)
+// Event name: "FilledRelay" (not "FilledV3Relay") — topic[0] = 0x44b559f1...
+// All address-like fields are bytes32; depositId is uint256 (supports non-EVM chain IDs)
 // Indexed fields: originChainId (topic[1]), depositId (topic[2]), relayer (topic[3])
-// depositor and recipient are NOT indexed — they must be checked from parsed args
+// recipient and outputToken are NOT indexed — checked via isMatchingLog from parsed args
 const EVM_SPOKE_POOL_ABI = [
-  'event FilledV3Relay(' +
-    'address inputToken,' +
-    'address outputToken,' +
+  'event FilledRelay(' +
+    'bytes32 inputToken,' +
+    'bytes32 outputToken,' +
     'uint256 inputAmount,' +
     'uint256 outputAmount,' +
     'uint256 repaymentChainId,' +
     'uint256 indexed originChainId,' +
-    'uint32 indexed depositId,' +
+    'uint256 indexed depositId,' +
     'uint32 fillDeadline,' +
     'uint32 exclusivityDeadline,' +
-    'address exclusiveRelayer,' +
-    'address indexed relayer,' +
-    'address depositor,' +
-    'address recipient,' +
-    'bytes message,' +
-    'tuple(address updatedRecipient, bytes updatedMessage, uint256 updatedOutputAmount, uint8 fillType) relayExecutionInfo' +
+    'bytes32 exclusiveRelayer,' +
+    'bytes32 indexed relayer,' +
+    'bytes32 depositor,' +
+    'bytes32 recipient,' +
+    'bytes32 messageHash,' +
+    'tuple(bytes32 updatedRecipient, bytes32 updatedMessageHash, uint256 updatedOutputAmount, uint8 fillType) relayExecutionInfo' +
   ')',
 ];
 
@@ -381,7 +383,7 @@ async function callDepositV3(
   return txSig;
 }
 
-// Stage 3: Watch EVM SpokePool for FilledV3Relay
+// Stage 3: Watch EVM SpokePool for FilledRelay
 // Phase 1 — quick historical getLogs check (catches fills that happened during Stage 2).
 // Phase 2 — WebSocket subscription so the fill is detected within milliseconds of emission.
 async function waitForEVMFill(
@@ -396,9 +398,9 @@ async function waitForEVMFill(
 
   const httpProvider   = new JsonRpcProvider(rpcUrl);
   const iface          = new Interface(EVM_SPOKE_POOL_ABI);
-  const filledTopic    = iface.getEvent('FilledV3Relay')!.topicHash;
+  const filledTopic    = iface.getEvent('FilledRelay')!.topicHash;
   // Filter by originChainId (Solana) — the first indexed param (topics[1]).
-  // recipient is NOT indexed in FilledV3Relay, so we check it from parsed args.
+  // recipient is NOT indexed in FilledRelay, so we check it from parsed args.
   const solanaChainId      = BigInt(config.bridge.acrossChainIds.solana);
   const originChainIdTopic = zeroPadValue(toBeHex(solanaChainId), 32);
 
@@ -408,16 +410,22 @@ async function waitForEVMFill(
   const outputTokenLower   = record.bridge.output_token_address.toLowerCase();
   const recipientLower     = record.wallet.toLowerCase();
 
+  // bytes32 fields are returned as 0x-prefixed hex (64 chars after 0x).
+  // EVM addresses are right-aligned in bytes32, so we take the last 40 hex chars.
+  function bytes32ToAddress(b32: string): string {
+    return '0x' + b32.slice(-40).toLowerCase();
+  }
+
   function isMatchingLog(log: { topics: readonly string[]; data: string }): boolean {
     try {
       const parsed = iface.parseLog({ topics: Array.from(log.topics), data: log.data });
       if (!parsed) return false;
-      const logRecipient: string    = parsed.args['recipient'];
-      const logOutputToken: string  = parsed.args['outputToken'];
+      const logRecipient: string    = bytes32ToAddress(parsed.args['recipient']);
+      const logOutputToken: string  = bytes32ToAddress(parsed.args['outputToken']);
       const logOutputAmount: bigint = parsed.args['outputAmount'];
       return (
-        logRecipient.toLowerCase()  === recipientLower   &&
-        logOutputToken.toLowerCase() === outputTokenLower &&
+        logRecipient   === recipientLower   &&
+        logOutputToken === outputTokenLower &&
         logOutputAmount >= minOutput &&
         logOutputAmount <= maxOutput
       );
@@ -467,13 +475,13 @@ async function waitForEVMFill(
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
       wsProvider.destroy();
-      reject(new Error('FilledV3Relay not found within timeout'));
+      reject(new Error('FilledRelay not found within timeout'));
       return;
     }
 
     const timeoutHandle = setTimeout(() => {
       wsProvider.destroy();
-      reject(new Error('FilledV3Relay not found within timeout'));
+      reject(new Error('FilledRelay not found within timeout'));
     }, remaining);
 
     wsProvider.on(
