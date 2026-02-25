@@ -39,22 +39,20 @@ Use `sessions_spawn` with `agentId: "orchestrator"` and pass the command as the 
 For create_payment_link:
 ```
 Spawn orchestrator sub-agent with message:
-"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon, chat_id=[TELEGRAM_CHAT_ID]. Source: business-product."
+"Process this payment request: action=create_payment_link, amount=100, token=USDC, chain=polygon. Source: business-product."
 ```
 
 For check_payment:
 ```
 Spawn orchestrator sub-agent with message:
-"Process this request: action=check_payment, payment_id=pay_XXXXXXXX, chat_id=[TELEGRAM_CHAT_ID]. Source: business-product."
+"Process this request: action=check_payment, payment_id=pay_XXXXXXXX. Source: business-product."
 ```
 
 For list_payments:
 ```
 Spawn orchestrator sub-agent with message:
-"Process this request: action=list_payments, filters: status=pending, chat_id=[TELEGRAM_CHAT_ID]. Source: business-product."
+"Process this request: action=list_payments, filters: status=pending. Source: business-product."
 ```
-
-Replace `[TELEGRAM_CHAT_ID]` with the actual Telegram chat ID from the incoming message (`message.chat.id`). This allows monitors to send automatic confirmation messages when payments complete.
 
 Wait for the orchestrator sub-agent to complete and return the result.
 

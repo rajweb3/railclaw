@@ -15,6 +15,7 @@ name: ""
 email: ""
 wallet: ""
 onboarded: false
+telegram_chat_id: ""
 ```
 
 ## specification

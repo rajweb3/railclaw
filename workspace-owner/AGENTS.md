@@ -70,6 +70,7 @@ business:
   email: "[email]"
   wallet: "[address]"
   onboarded: true
+  telegram_chat_id: "[message.chat.id]"
 ```
 
 Respond:
