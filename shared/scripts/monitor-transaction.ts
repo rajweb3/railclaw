@@ -261,11 +261,22 @@ async function main() {
     const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
     if (chatId && botToken) {
       try {
+        const explorerBase: Record<string, string> = {
+          polygon: 'https://polygonscan.com/tx',
+          arbitrum: 'https://arbiscan.io/tx',
+        };
+        const explorer = explorerBase[chain] ?? 'https://polygonscan.com/tx';
         const text =
-          `✅ <b>Payment Confirmed!</b>\n\n` +
-          `💰 <b>${amount} ${token}</b> received on ${chain}\n` +
-          `📦 Payment: <code>${paymentId}</code>\n` +
-          `🔗 Tx: <code>${txHash}</code>`;
+          `✅ <b>PAYMENT CONFIRMED</b>\n` +
+          `──────────────────────────\n` +
+          `📦 Payment: <code>${paymentId}</code>\n\n` +
+          `💸 <b>Transfer</b>\n` +
+          `Received: <b>${amount} ${token}</b> (${chain})\n` +
+          `To:       <code>${wallet}</code>\n\n` +
+          `🔗 <b>Transaction</b>\n` +
+          `<a href="${explorer}/${txHash}">view on explorer</a>\n\n` +
+          `🕐 Confirmed: ${confirmedAt}\n` +
+          `Confirmations: ${finalConfirmations}`;
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -652,12 +652,26 @@ async function main() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN_PRODUCT;
   if (chatId && botToken) {
     try {
+      const depositTxSig = (record as Record<string, unknown>).deposit_tx_sig as string | undefined;
+      const evmExplorerBase: Record<string, string> = {
+        polygon: 'https://polygonscan.com/tx',
+        arbitrum: 'https://arbiscan.io/tx',
+      };
+      const evmExplorer = evmExplorerBase[record.settlement_chain] ?? 'https://polygonscan.com/tx';
       const text =
-        `✅ <b>Bridge Payment Confirmed!</b>\n\n` +
-        `💰 <b>${humanOutput} ${record.token}</b> received on ${record.settlement_chain}\n` +
-        `📦 Payment: <code>${paymentId}</code>\n` +
-        `🔗 Fill tx: <code>${fillResult.txHash}</code>\n` +
-        `⛓ Route: Solana → ${record.settlement_chain}`;
+        `✅ <b>BRIDGE CONFIRMED</b>\n` +
+        `──────────────────────────\n` +
+        `📦 Payment: <code>${paymentId}</code>\n\n` +
+        `💸 <b>Transfer</b>\n` +
+        `Sent:     <b>${humanInput} ${record.token}</b> (Solana)\n` +
+        `Received: <b>${humanOutput} ${record.token}</b> (${record.settlement_chain})\n` +
+        `Fee:      ${record.bridge.relay_fee} ${record.token}\n` +
+        `To:       <code>${record.bridge.settlement_wallet}</code>\n\n` +
+        `🔗 <b>Transactions</b>\n` +
+        (depositTxSig ? `Solana deposit: <a href="https://solscan.io/tx/${depositTxSig}">view on Solscan</a>\n` : '') +
+        `${record.settlement_chain} fill: <a href="${evmExplorer}/${fillResult.txHash}">view on explorer</a>\n\n` +
+        `🕐 Confirmed: ${confirmedAt}\n` +
+        `Confirmations: ${fillResult.confirmations}`;
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
