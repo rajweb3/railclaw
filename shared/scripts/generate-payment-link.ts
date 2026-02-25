@@ -25,8 +25,6 @@ const amount = args['amount'];
 const wallet = args['wallet'];
 const business = args['business'];
 const businessId = args['business-id'];
-const chatId = args['chat-id'] || '';
-
 const missing = [];
 if (!chain) missing.push('--chain');
 if (!token) missing.push('--token');
@@ -54,7 +52,6 @@ const paymentRecord = {
   wallet,
   business_name: business,
   business_id: businessId,
-  telegram_chat_id: chatId,
   status: 'pending',
   created_at: now.toISOString(),
   expires_at: expiresAt.toISOString(),

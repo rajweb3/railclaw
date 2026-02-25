@@ -473,12 +473,22 @@ async function waitForEVMFill(
       },
     );
 
-    // Phase 2: Historical check — runs in parallel, catches fills from during Stage 2
+    // Phase 2: Historical check — runs in parallel, catches fills from during Stage 2.
+    // Bound fromBlock by bridging_at timestamp (when depositV3 was called) to avoid
+    // matching fills from previous bridge payments for the same wallet/amount.
+    // Polygon/Arbitrum ≈ 2s/block; add a 3-min buffer for safety.
+    // lookbackBlocks acts as a ceiling (allows large resume window via --resume-stage3).
     (async () => {
       try {
         const currentBlock = await httpProvider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
-        console.error(`[monitor-solana-deposit] Stage 3: Historical check blocks ${fromBlock}–${currentBlock} (${lookbackBlocks} block lookback)...`);
+        const BLOCK_TIME_SEC = 2;
+        const bridgingAt = (record as Record<string, unknown>).bridging_at as string | undefined;
+        const elapsedSec = bridgingAt
+          ? Math.max(0, (Date.now() - new Date(bridgingAt).getTime()) / 1000) + 180
+          : lookbackBlocks * BLOCK_TIME_SEC;
+        const computedLookback = Math.min(Math.ceil(elapsedSec / BLOCK_TIME_SEC), lookbackBlocks);
+        const fromBlock = Math.max(0, currentBlock - computedLookback);
+        console.error(`[monitor-solana-deposit] Stage 3: Historical check blocks ${fromBlock}–${currentBlock} (${computedLookback} blocks, bridging_at=${bridgingAt ?? 'unknown'})...`);
 
         const MAX_BLOCK_RANGE = 10;
         for (let cs = fromBlock; cs <= currentBlock && !settled; cs += MAX_BLOCK_RANGE) {

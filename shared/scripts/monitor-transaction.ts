@@ -110,7 +110,6 @@ async function waitForConfirmations(txHash: string, txBlock: number): Promise<nu
 // ERC-20: historical getLogs check first, then WebSocket subscription.
 // Returns the matching transfer or throws on timeout.
 async function waitForERC20Transfer(
-  decimals: number,
   minAmount: bigint,
   maxAmount: bigint,
   paymentCreatedAt: number,
@@ -241,7 +240,7 @@ async function main() {
       if (rec.created_at) paymentCreatedAt = new Date(rec.created_at).getTime();
     } catch { /* use startTime fallback */ }
     try {
-      const result = await waitForERC20Transfer(decimals, minAmount, maxAmount, paymentCreatedAt);
+      const result = await waitForERC20Transfer(minAmount, maxAmount, paymentCreatedAt);
       txHash = result.txHash;
       txBlock = result.blockNumber;
     } catch {

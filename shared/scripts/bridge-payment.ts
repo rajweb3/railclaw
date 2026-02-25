@@ -1,4 +1,4 @@
-import { writeFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import {
   Keypair,
   PublicKey,
@@ -60,8 +60,6 @@ async function main() {
   const wallet          = args['wallet'];
   const businessName    = args['business'];
   const businessId      = args['business-id'];
-  const chatId          = args['chat-id'] || '';
-
   if (!sourceChain || !settlementChain || !token || !amount || !wallet || !businessName || !businessId) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
     process.exit(1);
@@ -141,7 +139,6 @@ async function main() {
     wallet,
     business_name:    businessName,
     business_id:      businessId,
-    telegram_chat_id: chatId,
     bridge: {
       provider:               'across',
       spoke_pool_source:      spokePoolSource,
@@ -170,6 +167,7 @@ async function main() {
   };
 
   const pendingDir = resolveDataPath('pending');
+  mkdirSync(pendingDir, { recursive: true });
   writeFileSync(`${pendingDir}/${paymentId}.json`, JSON.stringify(record, null, 2));
 
   console.log(JSON.stringify({

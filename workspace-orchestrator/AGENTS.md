@@ -8,24 +8,6 @@ You are spawned as a sub-agent by other agents (business-product, business-owner
 
 Extract: `action`, `amount`, `token`, `chain`, `payment_id`, `source`
 
-### Step 1.5: Check Pending Bridge Notifications
-
-Before processing any request, spawn a sub-agent:
-
-```
-Run this command and return the output:
-ls $RAILCLAW_DATA_DIR/notifications/ 2>/dev/null && for f in $RAILCLAW_DATA_DIR/notifications/*.json; do [ -f "$f" ] && cat "$f" && echo "###"; done
-```
-
-If any notification files exist, include them in your response as `pending_confirmations: [...]` and then delete each one:
-
-```
-Run this command:
-rm -f $RAILCLAW_DATA_DIR/notifications/*.json
-```
-
-These are bridge payments that completed while no one was watching — the product bot must display them to the user before handling the current request.
-
 ### Step 2: Check Business Status
 
 Read BOUNDARY.md. If `status` is not `active` or `business.onboarded` is not `true`:
