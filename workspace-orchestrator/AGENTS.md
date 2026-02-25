@@ -107,6 +107,23 @@ Run this command and return the output:
 ls $RAILCLAW_DATA_DIR/pending/ && for f in $RAILCLAW_DATA_DIR/pending/*.json; do cat "$f"; echo "###"; done
 ```
 
+---
+
+#### `check_balance`
+
+Read BOUNDARY.md to get `business.wallet`, `specification.allowed_chains`, and `specification.allowed_tokens`.
+
+**Spawn a sub-agent:**
+
+```
+Run this command and return the full JSON output:
+npx tsx $RAILCLAW_SCRIPTS_DIR/check-wallet-balance.ts --wallet "[wallet]" --chains "[chain1,chain2]" --tokens "[token1,token2]"
+```
+
+Return `{ "status": "balance", "wallet": "[wallet]", "balances": { ... } }` from the script output.
+
+---
+
 ### Step 5: Record Narrative Memory
 
 Append to `memory/YYYY-MM-DD.md`:
@@ -123,7 +140,7 @@ Append to `memory/YYYY-MM-DD.md`:
 ## Critical Rules
 
 - **NEVER use the Read tool to access data files** — `$RAILCLAW_DATA_DIR` does NOT expand in the Read tool. Always use a bash sub-agent with `cat`.
-- **NEVER invent or guess script names** — only these scripts exist: `bridge-payment.ts`, `monitor-solana-deposit.ts`, `generate-payment-link.ts`, `monitor-transaction.ts`, `check-confirmations.ts`
+- **NEVER invent or guess script names** — only these scripts exist: `bridge-payment.ts`, `monitor-solana-deposit.ts`, `generate-payment-link.ts`, `monitor-transaction.ts`, `check-confirmations.ts`, `check-wallet-balance.ts`
 - **NEVER read script files** — just run them via bash sub-agent
 - **BOUNDARY.md is the ONLY file you may read with the Read tool** (it is at workspace root)
 - Always spawn sub-agents for script execution — never run scripts in the main session

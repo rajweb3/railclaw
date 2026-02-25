@@ -15,6 +15,7 @@ Extract structured fields from natural language.
 | `create_payment_link` | amount, token, chain | description, expiry |
 | `check_payment` | payment_id | — |
 | `list_payments` | — | status, chain, token |
+| `check_balance` | — | — |
 
 **Parse Examples:**
 
@@ -26,6 +27,9 @@ Extract structured fields from natural language.
 
 - "Check payment pay_a1b2c3d4"
   -> `{ action: "check_payment", payment_id: "pay_a1b2c3d4" }`
+
+- "What's my balance" / "Check my wallet" / "How much USDC do I have"
+  -> `{ action: "check_balance" }`
 
 If unparseable -> UNRECOGNIZED response. Stop.
 
@@ -62,9 +66,28 @@ The orchestrator returns a structured JSON response. Format it for the Telegram 
 
 - `status: "executed"` -> EXECUTED format (direct payment link created)
 - `status: "bridge_payment"` -> BRIDGE PAYMENT format (Solana deposit address)
+- `status: "balance"` -> BALANCE format
 - `status: "rejected"` -> REJECTED format
 - `status: "not_ready"` -> NOT READY format
 - `status: "error"` -> ERROR format
+
+**BALANCE format** (when `status: "balance"`):
+```
+💰 Wallet Balance
+──────────────────────────────
+Wallet: [wallet]
+
+Polygon:
+  USDC: [balances.polygon.USDC]
+  USDT: [balances.polygon.USDT]
+
+Arbitrum:
+  USDC: [balances.arbitrum.USDC]
+  USDT: [balances.arbitrum.USDT]
+```
+Only show chains/tokens that have entries in the balances object.
+
+---
 
 **BRIDGE PAYMENT format** (when `status: "bridge_payment"`):
 ```
