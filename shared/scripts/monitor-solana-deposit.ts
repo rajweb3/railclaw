@@ -660,18 +660,22 @@ async function main() {
       const evmExplorer = evmExplorerBase[record.settlement_chain] ?? 'https://polygonscan.com/tx';
       const text =
         `✅ <b>BRIDGE CONFIRMED</b>\n` +
-        `──────────────────────────\n` +
-        `📦 Payment: <code>${paymentId}</code>\n\n` +
+        `──────────────────────────────\n` +
+        `Payment:   <code>${paymentId}</code>\n` +
+        `Status:    Confirmed ✓\n\n` +
         `💸 <b>Transfer</b>\n` +
-        `Sent:     <b>${humanInput} ${record.token}</b> (Solana)\n` +
-        `Received: <b>${humanOutput} ${record.token}</b> (${record.settlement_chain})\n` +
-        `Fee:      ${record.bridge.relay_fee} ${record.token}\n` +
-        `To:       <code>${record.bridge.settlement_wallet}</code>\n\n` +
+        `Sent:      <b>${humanInput} ${record.token}</b> (Solana)\n` +
+        `Received:  <b>${humanOutput} ${record.token}</b> (${record.settlement_chain})\n` +
+        `Fee:       ${record.bridge.relay_fee} ${record.token}\n` +
+        `To:        <code>${record.bridge.settlement_wallet}</code>\n\n` +
         `🔗 <b>Transactions</b>\n` +
-        (depositTxSig ? `Solana deposit: <a href="https://solscan.io/tx/${depositTxSig}">view on Solscan</a>\n` : '') +
-        `${record.settlement_chain} fill: <a href="${evmExplorer}/${fillResult.txHash}">view on explorer</a>\n\n` +
+        (depositTxSig
+          ? `Solana deposit:  <code>${depositTxSig}</code>\nhttps://solscan.io/tx/${depositTxSig}\n`
+          : '') +
+        `${record.settlement_chain} fill:    <code>${fillResult.txHash}</code>\n${evmExplorer}/${fillResult.txHash}\n\n` +
         `🕐 Confirmed: ${confirmedAt}\n` +
-        `Confirmations: ${fillResult.confirmations}`;
+        `Confirmations: ${fillResult.confirmations}\n` +
+        `───────────`;
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

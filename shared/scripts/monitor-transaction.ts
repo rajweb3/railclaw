@@ -268,15 +268,18 @@ async function main() {
         const explorer = explorerBase[chain] ?? 'https://polygonscan.com/tx';
         const text =
           `✅ <b>PAYMENT CONFIRMED</b>\n` +
-          `──────────────────────────\n` +
-          `📦 Payment: <code>${paymentId}</code>\n\n` +
+          `──────────────────────────────\n` +
+          `Payment:   <code>${paymentId}</code>\n` +
+          `Status:    Confirmed ✓\n\n` +
           `💸 <b>Transfer</b>\n` +
-          `Received: <b>${amount} ${token}</b> (${chain})\n` +
-          `To:       <code>${wallet}</code>\n\n` +
+          `Received:  <b>${amount} ${token}</b> (${chain})\n` +
+          `To:        <code>${wallet}</code>\n\n` +
           `🔗 <b>Transaction</b>\n` +
-          `<a href="${explorer}/${txHash}">view on explorer</a>\n\n` +
+          `TX:        <code>${txHash}</code>\n` +
+          `${explorer}/${txHash}\n\n` +
           `🕐 Confirmed: ${confirmedAt}\n` +
-          `Confirmations: ${finalConfirmations}`;
+          `Confirmations: ${finalConfirmations}\n` +
+          `───────────`;
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
