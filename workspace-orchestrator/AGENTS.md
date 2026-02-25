@@ -63,15 +63,16 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts --source-chain "[chain]" --settl
 
 The output contains `bridge_instructions.deposit_address` — the Solana address the user sends USDC to.
 
-**Sub-Agent 2 — start background monitor:**
+**Sub-Agent 2 — spawn monitor sub-agent (fire and forget):**
+
+Spawn a new sub-agent via `sessions_spawn` with this task:
 
 ```
-Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
-echo "Monitor PID: $!"
+Run this command and return the full output when it completes:
+npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts --payment-id "[payment_id]" --settlement-chain "[settlement_chain]" --timeout 7200 --poll-interval 30 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1
 ```
 
-Once you have the PID, sub-agent 2 is done — do not wait further.
+Do NOT wait for this sub-agent to finish — it runs independently and ends when monitoring is complete (confirmed or timeout).
 
 Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 
@@ -85,15 +86,16 @@ Return `status: "bridge_payment"` with `bridge_instructions` from Sub-Agent 1.
 Run this command and return the full JSON output:
 npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --business "[business_name]" --business-id "[business_id]"```
 
-**Sub-Agent 2 — start background monitor:**
+**Sub-Agent 2 — spawn monitor sub-agent (fire and forget):**
+
+Spawn a new sub-agent via `sessions_spawn` with this task:
 
 ```
-Run this command and return immediately (it starts a background process):
-setsid nohup npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1 &
-echo "Monitor PID: $!"
+Run this command and return the full output when it completes:
+npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-transaction.ts --payment-id "[payment_id]" --chain "[chain]" --token "[token]" --amount [amount] --wallet "[wallet]" --confirmations 20 --timeout 3600 --poll-interval 15 >> $RAILCLAW_DATA_DIR/monitor-[payment_id].log 2>&1
 ```
 
-Once you have the PID, sub-agent 2 is done — do not wait further.
+Do NOT wait for this sub-agent to finish — it runs independently and ends when monitoring is complete (confirmed or timeout).
 
 Return `status: "executed"` with the payment link from Sub-Agent 1.
 
@@ -144,4 +146,5 @@ Append to `memory/YYYY-MM-DD.md`:
 - **BOUNDARY.md is the ONLY file you may read with the Read tool** (it is at workspace root)
 - Always spawn sub-agents for script execution — never run scripts in the main session
 - **Sub-agents are ephemeral — one task, one response, then they end.** Never reuse a sub-agent for a second task.
-- **You (orchestrator) end after Step 5.** Return your final JSON result to the product bot and stop. Do not remain active waiting for monitors or confirmations — those run independently in the background.
+- **Monitor sub-agents run independently via `sessions_spawn`.** They execute their script blocking (no `&`), and end when the script exits (confirmed or timeout). The orchestrator does NOT wait for them.
+- **You (orchestrator) end after Step 5.** Return your final JSON result to the product bot and stop. Do not remain active waiting for monitors or confirmations.
