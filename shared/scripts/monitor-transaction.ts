@@ -54,6 +54,19 @@ const provider = new ethers.JsonRpcProvider(rpcUrl);
 // Free-tier RPCs cap eth_getLogs to 10 blocks per request
 const MAX_BLOCK_RANGE = 10;
 
+// Transfers FROM these addresses are bridge fills (Across SpokePool executing a relay),
+// not direct user payments. Filtering them out prevents cross-contamination when a
+// bridge monitor and a direct payment monitor run in parallel for the same wallet.
+const BRIDGE_SENDERS = new Set(
+  Object.values(config.bridge.spokePools)
+    .filter(a => a.startsWith('0x'))
+    .map(a => a.toLowerCase())
+);
+function isBridgeFill(log: { topics: readonly string[] }): boolean {
+  if (log.topics.length < 2) return false;
+  return BRIDGE_SENDERS.has('0x' + log.topics[1].slice(-40).toLowerCase());
+}
+
 const startTime = Date.now();
 const timeoutMs = timeoutSeconds * 1000;
 
@@ -124,6 +137,7 @@ async function waitForERC20Transfer(
         toBlock: ce,
       });
       for (const log of logs) {
+        if (isBridgeFill(log)) continue; // skip Across relay fills
         const transferred = BigInt(log.data);
         if (transferred >= minAmount && transferred <= maxAmount) {
           console.error(`[monitor] Historical transfer found: ${log.transactionHash}`);
@@ -154,6 +168,7 @@ async function waitForERC20Transfer(
     wsProvider.on(
       { address: tokenContract, topics: [TRANSFER_TOPIC, null, recipientTopic] },
       (log) => {
+        if (isBridgeFill(log)) return; // skip Across relay fills
         const transferred = BigInt(log.data);
         if (transferred < minAmount || transferred > maxAmount) return;
         clearTimeout(timeoutHandle);

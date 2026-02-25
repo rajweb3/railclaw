@@ -609,43 +609,11 @@ async function main() {
   (record as Record<string, unknown>).confirmed_at  = confirmedAt;
   writeFileSync(recordPath, JSON.stringify(record, null, 2));
 
-  // Write to notifications queue so the orchestrator can report confirmation
-  // on the next product-bot message (push via poll-on-trigger pattern)
   const decimals = 6;
   const rawInput  = BigInt(record.bridge.raw_input_amount);
   const rawOutput = BigInt(record.bridge.raw_output_amount);
   const humanInput  = (Number(rawInput)  / 10 ** decimals).toFixed(decimals);
   const humanOutput = (Number(rawOutput) / 10 ** decimals).toFixed(decimals);
-
-  const notification = {
-    type:              'bridge_confirmed',
-    payment_id:        paymentId,
-    // Solana side
-    solana_deposit_tx: (record as Record<string, unknown>).deposit_tx_sig ?? null,
-    amount_sent:       humanInput,
-    // Polygon/EVM side
-    evm_fill_tx:       fillResult.txHash,
-    amount_received:   humanOutput,
-    confirmations:     fillResult.confirmations,
-    // Bridge details
-    token:             record.token,
-    relay_fee:         record.bridge.relay_fee,
-    source_chain:      record.source_chain,
-    settlement_chain:  record.settlement_chain,
-    settlement_wallet: record.bridge.settlement_wallet,
-    bridge_provider:   record.bridge.provider,
-    // Timing
-    confirmed_at:      confirmedAt,
-  };
-  try {
-    const notifDir = resolveDataPath('notifications');
-    const { mkdirSync } = await import('fs');
-    mkdirSync(notifDir, { recursive: true });
-    writeFileSync(`${notifDir}/${paymentId}.json`, JSON.stringify(notification, null, 2));
-    console.error(`[monitor-solana-deposit] Notification queued at notifications/${paymentId}.json`);
-  } catch (err) {
-    console.error(`[monitor-solana-deposit] Failed to write notification: ${String(err)}`);
-  }
 
   // Send Telegram confirmation directly if we have chat_id
   const chatId = process.env.TELEGRAM_OWNER_CHAT_ID;
