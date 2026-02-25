@@ -384,8 +384,8 @@ async function callDepositV3(
 }
 
 // Stage 3: Watch EVM SpokePool for FilledRelay
-// Phase 1 — quick historical getLogs check (catches fills that happened during Stage 2).
-// Phase 2 — WebSocket subscription so the fill is detected within milliseconds of emission.
+// WebSocket subscription starts FIRST (no gap), historical check runs in parallel.
+// resolveOnce ensures whichever path finds the fill first wins.
 async function waitForEVMFill(
   record: PendingRecord,
   deadline: number,
@@ -399,19 +399,17 @@ async function waitForEVMFill(
   const httpProvider   = new JsonRpcProvider(rpcUrl);
   const iface          = new Interface(EVM_SPOKE_POOL_ABI);
   const filledTopic    = iface.getEvent('FilledRelay')!.topicHash;
-  // Filter by originChainId (Solana) — the first indexed param (topics[1]).
-  // recipient is NOT indexed in FilledRelay, so we check it from parsed args.
+  // originChainId is topics[1] — filter to only our Solana deposit fills
   const solanaChainId      = BigInt(config.bridge.acrossChainIds.solana);
   const originChainIdTopic = zeroPadValue(toBeHex(solanaChainId), 32);
 
   const expectedOutputRaw = BigInt(record.bridge.raw_output_amount);
   const minOutput = (expectedOutputRaw * 9900n) / 10000n;
   const maxOutput = (expectedOutputRaw * 10100n) / 10000n;
-  const outputTokenLower   = record.bridge.output_token_address.toLowerCase();
-  const recipientLower     = record.wallet.toLowerCase();
+  const outputTokenLower = record.bridge.output_token_address.toLowerCase();
+  const recipientLower   = record.wallet.toLowerCase();
 
-  // bytes32 fields are returned as 0x-prefixed hex (64 chars after 0x).
-  // EVM addresses are right-aligned in bytes32, so we take the last 40 hex chars.
+  // bytes32 fields are right-aligned EVM addresses — extract the last 40 hex chars.
   function bytes32ToAddress(b32: string): string {
     return '0x' + b32.slice(-40).toLowerCase();
   }
@@ -432,75 +430,78 @@ async function waitForEVMFill(
     } catch { return false; }
   }
 
-  // Phase 1: Historical check — covers fills that happened while Stage 2 was running
-  let currentBlock = 0;
-  try {
-    currentBlock = await httpProvider.getBlockNumber();
-  } catch (err) {
-    console.error(`[monitor-solana-deposit] Stage 3: getBlockNumber failed: ${String(err)}`);
-  }
-
-  if (currentBlock > 0) {
-    const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
-    console.error(`[monitor-solana-deposit] Stage 3: Historical check blocks ${fromBlock}–${currentBlock} (${lookbackBlocks} block lookback)...`);
-
-    const MAX_BLOCK_RANGE = 10;
-    for (let cs = fromBlock; cs <= currentBlock; cs += MAX_BLOCK_RANGE) {
-      const ce = Math.min(cs + MAX_BLOCK_RANGE - 1, currentBlock);
-      try {
-        const logs = await httpProvider.getLogs({
-          address: spokePoolAddr,
-          topics:  [filledTopic, originChainIdTopic],
-          fromBlock: cs,
-          toBlock:   ce,
-        });
-        for (const log of logs) {
-          if (isMatchingLog(log)) {
-            const receipt = await httpProvider.getTransactionReceipt(log.transactionHash);
-            const confs   = receipt ? currentBlock - receipt.blockNumber + 1 : 1;
-            console.error(`[monitor-solana-deposit] Stage 3: Found historical fill: ${log.transactionHash}`);
-            return { txHash: log.transactionHash, confirmations: confs };
-          }
-        }
-      } catch { /* skip this chunk and continue */ }
-      await sleep(100);
-    }
-  }
-
-  // Phase 2: WebSocket subscription — instant notification when Across relayer fills
-  console.error(`[monitor-solana-deposit] Stage 3: No historical fill found — subscribing via WebSocket on ${settlementChain}...`);
-  const wsProvider = new WebSocketProvider(wsUrl);
-
   return new Promise<{ txHash: string; confirmations: number }>((resolve, reject) => {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      wsProvider.destroy();
       reject(new Error('FilledRelay not found within timeout'));
       return;
     }
 
+    let settled = false;
+    const wsProvider = new WebSocketProvider(wsUrl);
+
     const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       wsProvider.destroy();
       reject(new Error('FilledRelay not found within timeout'));
     }, remaining);
 
+    // resolveOnce — called by either WebSocket or historical check, first one wins
+    async function resolveOnce(txHash: string, blockNumber: number): Promise<void> {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      wsProvider.destroy();
+      try {
+        const curBlock = await httpProvider.getBlockNumber();
+        const confs    = curBlock - blockNumber + 1;
+        resolve({ txHash, confirmations: confs });
+      } catch {
+        resolve({ txHash, confirmations: 1 });
+      }
+    }
+
+    // Phase 1: WebSocket subscription — register FIRST so no events are missed
+    console.error(`[monitor-solana-deposit] Stage 3: Subscribing via WebSocket on ${settlementChain}...`);
     wsProvider.on(
       { address: spokePoolAddr, topics: [filledTopic, originChainIdTopic] },
       async (log) => {
         if (!isMatchingLog(log)) return;
-        clearTimeout(timeoutHandle);
-        wsProvider.destroy();
-        try {
-          const receipt  = await httpProvider.getTransactionReceipt(log.transactionHash);
-          const curBlock = await httpProvider.getBlockNumber();
-          const confs    = receipt ? curBlock - receipt.blockNumber + 1 : 1;
-          console.error(`[monitor-solana-deposit] Stage 3: WebSocket fill detected: ${log.transactionHash}`);
-          resolve({ txHash: log.transactionHash, confirmations: confs });
-        } catch {
-          resolve({ txHash: log.transactionHash, confirmations: 1 });
-        }
+        console.error(`[monitor-solana-deposit] Stage 3: WebSocket fill detected: ${log.transactionHash}`);
+        await resolveOnce(log.transactionHash, log.blockNumber);
       },
     );
+
+    // Phase 2: Historical check — runs in parallel, catches fills from during Stage 2
+    (async () => {
+      try {
+        const currentBlock = await httpProvider.getBlockNumber();
+        const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+        console.error(`[monitor-solana-deposit] Stage 3: Historical check blocks ${fromBlock}–${currentBlock} (${lookbackBlocks} block lookback)...`);
+
+        const MAX_BLOCK_RANGE = 10;
+        for (let cs = fromBlock; cs <= currentBlock && !settled; cs += MAX_BLOCK_RANGE) {
+          const ce = Math.min(cs + MAX_BLOCK_RANGE - 1, currentBlock);
+          try {
+            const logs = await httpProvider.getLogs({
+              address:   spokePoolAddr,
+              topics:    [filledTopic, originChainIdTopic],
+              fromBlock: cs,
+              toBlock:   ce,
+            });
+            for (const log of logs) {
+              if (isMatchingLog(log)) {
+                console.error(`[monitor-solana-deposit] Stage 3: Historical fill found: ${log.transactionHash}`);
+                await resolveOnce(log.transactionHash, log.blockNumber);
+                return;
+              }
+            }
+          } catch { /* skip chunk on RPC error */ }
+          await sleep(100);
+        }
+      } catch { /* getBlockNumber failed — WebSocket will still catch new fills */ }
+    })();
   });
 }
 
