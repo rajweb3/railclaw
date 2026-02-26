@@ -54,7 +54,8 @@
       accounts: {
         owner: {
           botToken: "${TELEGRAM_BOT_TOKEN_OWNER}",
-          dmPolicy: "pairing",
+          dmPolicy: "open",
+          allowFrom: ["*"],
           groups: {
             "*": { requireMention: true, groupPolicy: "allowlist" }
           },
