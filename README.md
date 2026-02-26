@@ -1,5 +1,7 @@
 # Railclaw
 
+<img src="logo.jpg" alt="Railclaw" width="120" />
+
 Crypto payment infrastructure for businesses, built on [OpenClaw](https://github.com/openclaw/openclaw). Businesses define rules once — allowed chains, tokens, limits — and the system enforces them automatically on every payment request.
 
 ## Architecture
