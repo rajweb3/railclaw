@@ -11,7 +11,7 @@
  * Keystore stored at $RAILCLAW_DATA_DIR/wallets/{business_id}.enc.json (mode 0600)
  */
 
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { ethers } from 'ethers';
 import { config, parseArgs, resolveDataPath } from './lib/config.js';
@@ -30,6 +30,20 @@ if (!config.encryption.walletKey) {
   process.exit(1);
 }
 
+const walletsDir = resolveDataPath('wallets');
+mkdirSync(walletsDir, { recursive: true });
+
+// Return existing wallet if one already exists for this email
+const existing = readdirSync(walletsDir)
+  .filter(f => f.endsWith('.enc.json'))
+  .map(f => { try { return JSON.parse(readFileSync(join(walletsDir, f), 'utf8')); } catch { return null; } })
+  .find(k => k && k.email === email);
+
+if (existing) {
+  console.log(JSON.stringify({ success: true, address: existing.address, business_id: existing.business_id, existing: true }));
+  process.exit(0);
+}
+
 const wallet = ethers.Wallet.createRandom();
 const businessId = generateId('biz');
 const encryptedKey = encrypt(wallet.privateKey, config.encryption.walletKey);
@@ -43,8 +57,6 @@ const keystore = {
   created_at: new Date().toISOString(),
 };
 
-const walletsDir = resolveDataPath('wallets');
-mkdirSync(walletsDir, { recursive: true });
 writeFileSync(join(walletsDir, `${businessId}.enc.json`), JSON.stringify(keystore, null, 2), {
   mode: 0o600,
 });
