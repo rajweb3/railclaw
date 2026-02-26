@@ -15,6 +15,7 @@ Extract structured fields from natural language.
 | `create_payment_link` | amount, token, chain | description, expiry |
 | `check_payment` | payment_id | — |
 | `list_payments` | — | status, chain, token |
+| `check_balance` | — | — |
 
 **Parse Examples:**
 
@@ -26,6 +27,9 @@ Extract structured fields from natural language.
 
 - "Check payment pay_a1b2c3d4"
   -> `{ action: "check_payment", payment_id: "pay_a1b2c3d4" }`
+
+- "What's my balance" / "Check my wallet" / "How much USDC do I have"
+  -> `{ action: "check_balance" }`
 
 If unparseable -> UNRECOGNIZED response. Stop.
 
@@ -60,10 +64,46 @@ Wait for the orchestrator sub-agent to complete and return the result.
 
 The orchestrator returns a structured JSON response. Format it for the Telegram user:
 
-- `status: "executed"` -> EXECUTED format
+- `status: "executed"` -> EXECUTED format (direct payment link created)
+- `status: "bridge_payment"` -> BRIDGE PAYMENT format (Solana deposit address)
+- `status: "balance"` -> BALANCE format
 - `status: "rejected"` -> REJECTED format
 - `status: "not_ready"` -> NOT READY format
 - `status: "error"` -> ERROR format
+
+**BALANCE format** (when `status: "balance"`):
+```
+💰 Wallet Balance
+──────────────────────────────
+Wallet: [wallet]
+
+Polygon:
+  USDC: [balances.polygon.USDC]
+  USDT: [balances.polygon.USDT]
+
+Arbitrum:
+  USDC: [balances.arbitrum.USDC]
+  USDT: [balances.arbitrum.USDT]
+```
+Only show chains/tokens that have entries in the balances object.
+
+---
+
+**BRIDGE PAYMENT format** (when `status: "bridge_payment"`):
+```
+BRIDGE PAYMENT — Send USDC on Solana
+──────────────────────────────
+Deposit address: [bridge_instructions.deposit_address]
+Network:         Solana
+Amount to send:  [bridge_instructions.amount_to_send] [bridge_instructions.token]
+Relay fee:       [bridge_instructions.relay_fee] [bridge_instructions.token]
+You receive:     [bridge_instructions.business_receives] [bridge_instructions.token]
+Settles on:      [bridge_instructions.settlement_chain]
+
+Send exactly [amount_to_send] USDC to the deposit address above.
+Payment is processed automatically once received.
+Expires: [expires_at]
+```
 
 ## Important Rules
 

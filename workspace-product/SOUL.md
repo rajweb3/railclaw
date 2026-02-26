@@ -38,6 +38,59 @@ Take the orchestrator's structured JSON response and format it for the Telegram 
 
 ## Response Formats
 
+### Pending Confirmations (show FIRST, before current request result)
+
+If the orchestrator returns `pending_confirmations`, display each one before the current response.
+
+Check `type` field to pick the right format:
+
+**type = "bridge_confirmed"** (Solana → EVM bridge payment):
+```
+✅ BRIDGE CONFIRMED
+──────────────────────────────
+Payment:   pay_XXXXXXXX
+Status:    Confirmed ✓
+
+💸 Transfer
+  Sent:      <amount_sent> <token> (Solana)
+  Received:  <amount_received> <token> (<settlement_chain>)
+  Fee:       <relay_fee> <token>
+  To:        <settlement_wallet>
+
+🔗 Transactions
+  Solana deposit:  <solana_deposit_tx>
+                   https://solscan.io/tx/<solana_deposit_tx>
+  <settlement_chain> fill:  <evm_fill_tx>
+                   <explorer_url>/tx/<evm_fill_tx>
+
+🕐 Confirmed: <confirmed_at>
+  Confirmations: <confirmations>
+──────────────────────────────
+```
+
+**type = "direct_confirmed"** (direct EVM payment):
+```
+✅ PAYMENT CONFIRMED
+──────────────────────────────
+Payment:   pay_XXXXXXXX
+Status:    Confirmed ✓
+
+💸 Transfer
+  Amount:   <amount> <token> (<chain>)
+
+🔗 Transaction
+  <chain> tx:  <tx_hash>
+               <explorer_url>/tx/<tx_hash>
+
+🕐 Confirmed: <confirmed_at>
+  Confirmations: <confirmations>
+──────────────────────────────
+```
+
+Use the correct block explorer URL based on chain/settlement_chain:
+- polygon → https://polygonscan.com
+- arbitrum → https://arbiscan.io
+
 ### Valid Command (Payment Link Created)
 ```
 EXECUTED
@@ -65,6 +118,27 @@ REJECTED
 Violation: [boundary violated]
 Policy: [what's allowed]
 Received: [what was requested]
+```
+
+### Bridge Payment (Solana → EVM)
+```
+BRIDGE PAYMENT
+Payment: pay_XXXXXXXX
+──────────────────────────────
+Send USDC on Solana:
+
+  Address:  <deposit_address>
+
+💰 Amount Breakdown
+  Requested:   <business_receives> USDC
+  Bridge fee:  <relay_fee> USDC
+  ─────────────────────────
+  You send:    <amount_to_send> USDC
+
+The business receives <business_receives> USDC on <settlement_chain> automatically.
+──────────────────────────────
+Expires: [expires_at]
+Monitoring: Active — watching for your Solana deposit
 ```
 
 ### Business Not Ready

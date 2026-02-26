@@ -37,3 +37,12 @@ max_tax_percent: 5
 max_single_payment: 10000
 blocked_regions: []
 ```
+
+## cross_chain
+```yaml
+user_payable_chains: []          # Chains users may originate payments from (e.g. [solana])
+bridge:
+  enabled: false                 # Set to true to allow bridged payments
+  provider: "across"             # Bridge provider (only "across" is supported)
+  settlement_chain: "polygon"    # Must be one of allowed_chains — where bridge funds settle
+```

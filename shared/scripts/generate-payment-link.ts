@@ -25,7 +25,6 @@ const amount = args['amount'];
 const wallet = args['wallet'];
 const business = args['business'];
 const businessId = args['business-id'];
-
 const missing = [];
 if (!chain) missing.push('--chain');
 if (!token) missing.push('--token');

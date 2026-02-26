@@ -29,12 +29,63 @@ Before ANY execution:
 3. Validate the command against ALL boundary rules
 4. REJECT immediately if any rule is violated
 
-### 3. Binary Decision
+### 3. Routing Decision — MANDATORY
 
+Read `specification.allowed_chains` and `cross_chain` from BOUNDARY.md. Then:
+
+---
+
+**If `command.chain` is in `specification.allowed_chains` (polygon, arbitrum):**
+
+Spawn sub-agent via `sessions_spawn`:
 ```
-VALID   → spawn sub-agent → execute → return result
-INVALID → return structured rejection
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
+  --chain "[chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
 ```
+Then spawn tx-monitor. Return `status: "executed"` with the link URL.
+
+---
+
+**If `command.chain` is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`:**
+
+⚠️ DO NOT run generate-payment-link.ts. DO NOT run monitor-transaction.ts.
+
+Spawn sub-agent via `sessions_spawn`:
+```
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
+  --source-chain "[chain]" \
+  --settlement-chain "[cross_chain.bridge.settlement_chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
+```
+Then spawn a second sub-agent:
+```
+Run the following command and return the JSON output when it completes:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts \
+  --payment-id "[payment_id from bridge-payment output]" \
+  --settlement-chain "[settlement_chain]" \
+  --timeout 7200 \
+  --poll-interval 30
+```
+Return `status: "bridge_payment"` with the `bridge_instructions` from bridge-payment.ts output (includes the Solana `deposit_address`).
+
+---
+
+**If chain is in neither list, or bridge is disabled:**
+Return `status: "rejected"` with `violation: "chain"`.
 
 ### 4. Ephemeral Sub-Agents
 
@@ -76,13 +127,34 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 }
 ```
 
+### Bridge Payment (route: bridge)
+```json
+{
+  "status": "bridge_payment",
+  "payment_id": "pay_XXXXXXXX",
+  "bridge_instructions": {
+    "network": "solana",
+    "deposit_address": "<one-time Solana address where user sends USDC>",
+    "token": "USDC",
+    "amount_to_send": "100.50",
+    "relay_fee": "0.50",
+    "business_receives": "100.00",
+    "settlement_chain": "polygon",
+    "settlement_wallet": "0x...",
+    "note": "Send USDC to deposit_address. Funds bridge automatically to settlement chain."
+  },
+  "expires_at": "2026-02-25T12:00:00Z",
+  "monitor": "active"
+}
+```
+
 ### Rejection
 ```json
 {
   "status": "rejected",
   "violation": "chain",
-  "policy": ["polygon"],
-  "received": "solana"
+  "policy": ["polygon", "arbitrum", "solana"],
+  "received": "ethereum"
 }
 ```
 

@@ -8,7 +8,39 @@ export const config = {
   rpc: {
     polygon: process.env.RPC_POLYGON || 'https://polygon-rpc.com',
     arbitrum: process.env.RPC_ARBITRUM || 'https://arb1.arbitrum.io/rpc',
+    solana: process.env.RPC_SOLANA || 'https://api.mainnet-beta.solana.com',
   } as Record<string, string>,
+
+  sol: {
+    // Solana wallet that holds SOL to fund temp wallets for transaction fees
+    // Generate with: npx tsx shared/scripts/generate-sol-dispenser.ts
+    // Fund it with at least 0.01 SOL on mainnet (~100 payments)
+    dispenserKey: process.env.SOLANA_SOL_DISPENSER_KEY || '',
+    // SOL sent to each temp wallet to cover depositV3 tx fees (~5000 lamports actual fee)
+    fundAmountLamports: parseInt(process.env.SOLANA_FUND_LAMPORTS || '1000000'), // 0.001 SOL
+  },
+
+  bridge: {
+    // Across Protocol chain IDs
+    acrossChainIds: {
+      polygon: 137,
+      arbitrum: 42161,
+      solana: 34268394551451,
+    } as Record<string, number>,
+    // Across SpokePool contract addresses per chain
+    spokePools: {
+      polygon: '0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096',
+      arbitrum: '0xe35e9842fceaca96570b734083f4a58e8f7c5f2a',
+      // Solana SpokePool program ID (not an EVM address)
+      solana: 'DLv3NggMiSaef97YCkew5xKUHDh13tVGZ7tydt3ZeAru',
+    } as Record<string, string>,
+    // Conservative relay fee estimate: 0.12% of amount (LP fee ~0.04% + gas buffer)
+    estimatedRelayFeePct: parseFloat(process.env.ACROSS_RELAY_FEE_PCT || '0.0012'),
+    // Minimum fee buffer in token base units (covers gas on destination)
+    minRelayFeeBuffer: parseFloat(process.env.ACROSS_MIN_FEE_BUFFER || '0.05'),
+    // How far ahead to set fillDeadline (seconds) — 6 hours is standard
+    fillDeadlineOffsetSec: 6 * 60 * 60,
+  },
 
   encryption: {
     walletKey: process.env.WALLET_ENCRYPTION_KEY || '',
@@ -28,7 +60,7 @@ export const config = {
   // Shared data directory (mounted into both containers)
   dataDir: process.env.RAILCLAW_DATA_DIR || '/data',
 
-  // Well-known ERC-20 token contract addresses per chain
+  // Well-known token addresses per chain (ERC-20 on EVM, mint addresses on Solana)
   tokens: {
     polygon: {
       USDC: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
@@ -41,6 +73,9 @@ export const config = {
       USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
       DAI: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1',
       WETH: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+    },
+    solana: {
+      USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     },
   } as Record<string, Record<string, string>>,
 };
