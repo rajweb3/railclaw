@@ -72,6 +72,8 @@ business:
   onboarded: true
 ```
 
+Then copy the full contents of BOUNDARY.md to `$RAILCLAW_DATA_DIR/boundary-backup.md` (create or overwrite).
+
 Respond:
 ```
 ONBOARDED — Step 5/5
@@ -96,5 +98,6 @@ Route to the appropriate skill based on the command prefix.
 - Data is at $RAILCLAW_DATA_DIR/ (wallets, pending payments, OTP)
 - NEVER expose private keys
 - NEVER skip OTP verification
-- NEVER allow onboarding if already onboarded
+- NEVER allow onboarding if already onboarded (`onboarded: true` in BOUNDARY.md means business is registered — do NOT restart onboarding)
 - After any boundary change, write a memory trace to `memory/YYYY-MM-DD.md`
+- A backup of BOUNDARY.md is kept at `$RAILCLAW_DATA_DIR/boundary-backup.md` — if BOUNDARY.md appears corrupt or empty, restore from backup before doing anything else

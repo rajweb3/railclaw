@@ -49,6 +49,7 @@ When `/boundary set-bridge off` is called:
 1. Increment `version`
 2. Update `updated_at`
 3. Write memory trace to `memory/YYYY-MM-DD.md`
+4. Copy the full contents of BOUNDARY.md to `$RAILCLAW_DATA_DIR/boundary-backup.md` (overwrite)
 
 Note: The orchestrator reads BOUNDARY.md fresh on every request, so no notification is needed. Changes take immediate effect.
 
