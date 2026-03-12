@@ -72,6 +72,98 @@ function RailCard({ msg }: { msg: Extract<Msg, { kind: 'rail' }> }) {
   )
 }
 
+// ── Receipt row helper ─────────────────────────────────────────────────────────
+function RR({ k, v }: { k: string; v?: string }) {
+  if (!v) return null
+  return (
+    <div className="receipt-row">
+      <span className="rk">{k}</span>
+      <span className="rv">{v}</span>
+    </div>
+  )
+}
+
+function NanoReceipt({ msg }: { msg: Extract<Msg, { kind: 'nano-receipt' }> }) {
+  return (
+    <div className="receipt receipt-nano">
+      <div className="receipt-header">⚡ Nanopayment Complete</div>
+      <hr className="receipt-divider" />
+      <RR k="Rail"    v="Circle Gateway (gasless USDC)" />
+      <RR k="Chain"   v={msg.chain} />
+      <RR k="Service" v={msg.serviceUrl} />
+      <RR k="Amount"  v={`${msg.amount} USDC`} />
+      <RR k="Mode"    v={msg.mode} />
+      {msg.balanceBefore && <RR k="Balance before" v={msg.balanceBefore} />}
+      {msg.balanceAfter  && <RR k="Balance after"  v={msg.balanceAfter} />}
+    </div>
+  )
+}
+
+function CardReceipt({ msg }: { msg: Extract<Msg, { kind: 'card-receipt' }> }) {
+  return (
+    <div className="receipt receipt-card">
+      <div className="receipt-header">💳 Card Payment Complete</div>
+      <hr className="receipt-divider" />
+      <RR k="Rail"    v="AgentCard Visa (fiat)" />
+      <RR k="Card"    v={msg.maskedPan} />
+      <RR k="Expiry"  v={msg.expiry} />
+      <RR k="Amount"  v={`$${msg.amount} USD`} />
+      <RR k="Balance" v={msg.balance} />
+      <RR k="Status"  v={msg.chargeStatus ?? 'approved'} />
+      <RR k="Mode"    v={msg.mode} />
+    </div>
+  )
+}
+
+function LinkReceipt({ msg }: { msg: Extract<Msg, { kind: 'link-receipt' }> }) {
+  return (
+    <div className="receipt receipt-link">
+      <div className="receipt-header">🔗 Payment Link Created</div>
+      <hr className="receipt-divider" />
+      <RR k="Payment"   v={msg.paymentId} />
+      <RR k="Chain"     v={msg.chain} />
+      <RR k="Token"     v={msg.token} />
+      <RR k="Amount"    v={msg.amount} />
+      <RR k="Recipient" v={msg.recipient} />
+      {msg.expires && <RR k="Expires" v={msg.expires} />}
+      {msg.link && (
+        <div className="receipt-row" style={{ marginTop: 6 }}>
+          <a className="receipt-link-url" href={msg.link} target="_blank" rel="noreferrer">{msg.link}</a>
+        </div>
+      )}
+      <div className="receipt-monitor">● Monitoring for incoming transaction</div>
+    </div>
+  )
+}
+
+function BridgeReceipt({ msg }: { msg: Extract<Msg, { kind: 'bridge-receipt' }> }) {
+  return (
+    <div className="receipt receipt-bridge">
+      <div className="receipt-header">🌉 Bridge Payment Initiated</div>
+      <hr className="receipt-divider" />
+      <RR k="Payment"    v={msg.paymentId} />
+      <RR k="Send to"    v={msg.depositAddress} />
+      <RR k="You send"   v={`${msg.amountToSend} USDC (Solana)`} />
+      <RR k="Bridge fee" v={`${msg.relayFee} USDC`} />
+      <RR k="Receives"   v={`${msg.businessReceives} USDC on ${msg.settlementChain}`} />
+      {msg.expires && <RR k="Expires" v={msg.expires} />}
+      <div className="receipt-monitor">● Monitoring Solana deposit</div>
+    </div>
+  )
+}
+
+function RejectedCard({ msg }: { msg: Extract<Msg, { kind: 'rejected' }> }) {
+  return (
+    <div className="receipt receipt-rejected">
+      <div className="receipt-header">✖ Payment Rejected</div>
+      <hr className="receipt-divider" />
+      <RR k="Violation" v={msg.violation} />
+      <RR k="Policy"    v={msg.policy} />
+      <RR k="Received"  v={msg.received} />
+    </div>
+  )
+}
+
 function StatusStrip({ status }: { status: ChatStatus }) {
   return (
     <div className="status-strip">
@@ -189,11 +281,16 @@ export function ChatPanel({ side, title, subtitle, agentBadge, avatar, endpoint,
         {messages.length === 0 && <EmptyState side={side} />}
 
         {messages.map(msg => {
-          if (msg.kind === 'user')     return <UserBubble  key={msg.id} text={msg.text} />
-          if (msg.kind === 'agent')    return <AgentBubble key={msg.id} text={msg.text} streaming={msg.streaming} side={side} />
-          if (msg.kind === 'thinking') return <ThinkingBlock key={msg.id} text={msg.text} />
-          if (msg.kind === 'step')     return <StepCard   key={msg.id} msg={msg} />
-          if (msg.kind === 'rail')     return <RailCard   key={msg.id} msg={msg} />
+          if (msg.kind === 'user')           return <UserBubble    key={msg.id} text={msg.text} />
+          if (msg.kind === 'agent')          return <AgentBubble   key={msg.id} text={msg.text} streaming={msg.streaming} side={side} />
+          if (msg.kind === 'thinking')       return <ThinkingBlock key={msg.id} text={msg.text} />
+          if (msg.kind === 'step')           return <StepCard      key={msg.id} msg={msg} />
+          if (msg.kind === 'rail')           return <RailCard      key={msg.id} msg={msg} />
+          if (msg.kind === 'nano-receipt')   return <NanoReceipt   key={msg.id} msg={msg} />
+          if (msg.kind === 'card-receipt')   return <CardReceipt   key={msg.id} msg={msg} />
+          if (msg.kind === 'link-receipt')   return <LinkReceipt   key={msg.id} msg={msg} />
+          if (msg.kind === 'bridge-receipt') return <BridgeReceipt key={msg.id} msg={msg} />
+          if (msg.kind === 'rejected')       return <RejectedCard  key={msg.id} msg={msg} />
           return null
         })}
 

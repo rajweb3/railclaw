@@ -473,6 +473,81 @@ header {
 .rc-k { color: var(--muted); flex-shrink: 0; }
 .rc-v { color: var(--text); }
 
+/* ── Payment receipt cards ───────────────────────────────────────────────────── */
+
+.receipt {
+  border-radius: var(--radius);
+  padding: 11px 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 2px 0;
+}
+
+.receipt-header {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 5px;
+  letter-spacing: -0.2px;
+}
+
+.receipt-divider {
+  border: none;
+  border-top: 1px solid;
+  margin: 5px 0 7px;
+  opacity: 0.3;
+}
+
+.receipt-row {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+}
+.rk { color: var(--muted2); min-width: 90px; flex-shrink: 0; }
+.rv { color: var(--text); word-break: break-all; }
+
+.receipt-link-url {
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 10px;
+  word-break: break-all;
+}
+.receipt-link-url:hover { text-decoration: underline; }
+
+.receipt-monitor {
+  margin-top: 7px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: receipt-pulse 2s ease-in-out infinite;
+}
+@keyframes receipt-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+/* Color variants */
+.receipt-nano   { border: 1px solid var(--blue-border);   background: var(--blue-dim);   }
+.receipt-nano   .receipt-header { color: var(--blue); }
+.receipt-nano   .receipt-divider { border-color: var(--blue); }
+.receipt-nano   .receipt-monitor { color: var(--green); }
+
+.receipt-card   { border: 1px solid var(--purple-border); background: var(--purple-dim); }
+.receipt-card   .receipt-header { color: var(--purple); }
+.receipt-card   .receipt-divider { border-color: var(--purple); }
+
+.receipt-link   { border: 1px solid var(--green-border);  background: var(--green-dim);  }
+.receipt-link   .receipt-header { color: var(--green); }
+.receipt-link   .receipt-divider { border-color: var(--green); }
+.receipt-link   .receipt-monitor { color: var(--green); }
+
+.receipt-bridge { border: 1px solid var(--orange-border); background: var(--orange-dim); }
+.receipt-bridge .receipt-header { color: var(--orange); }
+.receipt-bridge .receipt-divider { border-color: var(--orange); }
+.receipt-bridge .receipt-monitor { color: var(--orange); }
+
+.receipt-rejected { border: 1px solid var(--red-border);  background: var(--red-dim);    }
+.receipt-rejected .receipt-header { color: var(--red); }
+.receipt-rejected .receipt-divider { border-color: var(--red); }
+
 /* ── Input area ──────────────────────────────────────────────────────────────── */
 
 .input-row {

@@ -92,6 +92,71 @@ function parseSSE(raw: string): SSEEvent[] {
   return events
 }
 
+// ── Payment result parser ─────────────────────────────────────────────────────
+// Parses the product bot's formatted text output into structured receipt Msgs.
+
+function g(text: string, pattern: RegExp): string {
+  return text.match(pattern)?.[1]?.trim() ?? ''
+}
+
+function parsePaymentResult(text: string, id: string): Msg | null {
+  if (text.includes('NANOPAYMENT COMPLETE')) {
+    return {
+      id, kind: 'nano-receipt',
+      chain:         g(text, /Chain:\s*(.+)/),
+      serviceUrl:    g(text, /Service:\s*(.+)/),
+      amount:        g(text, /Amount:\s*([0-9.]+)/),
+      mode:          g(text, /Mode:\s*(live|simulation)/i) || 'live',
+      balanceBefore: g(text, /[Bb]alance before:\s*(.+)/) || undefined,
+      balanceAfter:  g(text, /[Bb]alance after:\s*(.+)/)  || undefined,
+    }
+  }
+  if (text.includes('CARD PAYMENT COMPLETE')) {
+    return {
+      id, kind: 'card-receipt',
+      maskedPan:    g(text, /Card:\s*(.+)/),
+      expiry:       g(text, /Expiry:\s*(.+)/),
+      amount:       g(text, /Amount:\s*\$?([0-9.]+)/),
+      balance:      g(text, /Balance:\s*(.+)/),
+      mode:         g(text, /Mode:\s*(live|simulation)/i) || 'live',
+      chargeStatus: g(text, /Status:\s*(.+)/) || undefined,
+    }
+  }
+  if (text.includes('EXECUTED') && text.includes('Payment:')) {
+    return {
+      id, kind: 'link-receipt',
+      paymentId: g(text, /Payment:\s*(pay_\S+)/),
+      link:      g(text, /Link:\s*(https?:\/\/\S+)/),
+      chain:     g(text, /Chain:\s*(\w+)/),
+      token:     g(text, /Token:\s*(\w+)/),
+      amount:    g(text, /Amount:\s*([0-9.]+)/),
+      recipient: g(text, /Recipient:\s*(.+)/),
+      expires:   g(text, /Expires:\s*(.+)/) || undefined,
+    }
+  }
+  if (text.includes('BRIDGE PAYMENT') && text.includes('Payment:')) {
+    return {
+      id, kind: 'bridge-receipt',
+      paymentId:        g(text, /Payment:\s*(pay_\S+)/),
+      depositAddress:   g(text, /Address:\s*(\S+)/),
+      amountToSend:     g(text, /You send:\s*([0-9.]+)/),
+      relayFee:         g(text, /Bridge fee:\s*([0-9.]+)/),
+      businessReceives: g(text, /Requested:\s*([0-9.]+)/),
+      settlementChain:  g(text, /The business receives [0-9.]+ USDC on (\w+)/),
+      expires:          g(text, /Expires:\s*(.+)/) || undefined,
+    }
+  }
+  if (text.includes('REJECTED') && text.includes('Violation:')) {
+    return {
+      id, kind: 'rejected',
+      violation: g(text, /Violation:\s*(.+)/),
+      policy:    g(text, /Policy:\s*(.+)/),
+      received:  g(text, /Received:\s*(.+)/),
+    }
+  }
+  return null
+}
+
 function detectTool(text: string): 'spawn' | 'script' | 'boundary' | null {
   if (text.includes('sessions_spawn') || text.includes('spawning')) return 'spawn'
   if (text.includes('npx tsx') || text.includes('nanopayment.ts') || text.includes('agent-card-payment.ts')) return 'script'
@@ -147,6 +212,7 @@ export function useChat(endpoint: string) {
   // Track in-flight streaming IDs via ref (stable across renders)
   const streamRef = useRef({
     agentId:    null as string | null,
+    agentText:  '',                      // accumulated full text for receipt parsing
     thinkingId: null as string | null,
     spawnId:    null as string | null,
     scriptId:   null as string | null,
@@ -167,7 +233,8 @@ export function useChat(endpoint: string) {
     dispatch({ type: 'SET_BUSY', busy: true })
 
     const ref = streamRef.current
-    ref.agentId = null; ref.thinkingId = null
+    ref.agentId = null; ref.agentText = ''
+    ref.thinkingId = null
     ref.spawnId = null; ref.scriptId = null
     ref.inThinking = false; ref.toolShown.clear()
 
@@ -268,6 +335,7 @@ export function useChat(endpoint: string) {
                 setStatus('thinking', '📝 responding...')
               }
               dispatch({ type: 'APPEND_AGENT', id: ref.agentId, chunk })
+              ref.agentText += chunk
             }
 
             // Heuristic: detect spawn/script from plain text stream
@@ -294,7 +362,12 @@ export function useChat(endpoint: string) {
 
           // ── completed ──────────────────────────────────────────────────────
           if (evType === 'response.completed' || evType === 'response.done') {
-            if (ref.agentId)  { dispatch({ type: 'FINISH_AGENT', id: ref.agentId }); ref.agentId = null }
+            if (ref.agentId) {
+              dispatch({ type: 'FINISH_AGENT', id: ref.agentId })
+              const receipt = parsePaymentResult(ref.agentText, uid())
+              if (receipt) dispatch({ type: 'ADD_MSG', msg: receipt })
+              ref.agentId = null; ref.agentText = ''
+            }
             if (ref.spawnId)  { dispatch({ type: 'SETTLE_STEP',  id: ref.spawnId, body: 'complete' });  ref.spawnId  = null }
             if (ref.scriptId) { dispatch({ type: 'SETTLE_STEP',  id: ref.scriptId, body: 'complete' }); ref.scriptId = null }
 
@@ -335,7 +408,12 @@ export function useChat(endpoint: string) {
       }
 
       // finalize on stream end
-      if (ref.agentId)  { dispatch({ type: 'FINISH_AGENT', id: ref.agentId }); ref.agentId = null }
+      if (ref.agentId) {
+        dispatch({ type: 'FINISH_AGENT', id: ref.agentId })
+        const receipt = parsePaymentResult(ref.agentText, uid())
+        if (receipt) dispatch({ type: 'ADD_MSG', msg: receipt })
+        ref.agentId = null; ref.agentText = ''
+      }
       if (ref.spawnId)  { dispatch({ type: 'SETTLE_STEP',  id: ref.spawnId, body: 'complete' });  ref.spawnId  = null }
       if (ref.scriptId) { dispatch({ type: 'SETTLE_STEP',  id: ref.scriptId, body: 'complete' }); ref.scriptId = null }
 
