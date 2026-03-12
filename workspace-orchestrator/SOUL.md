@@ -31,65 +31,13 @@ Before ANY execution:
 
 ### 3. Routing Decision — MANDATORY
 
-Read `specification.allowed_chains` and `cross_chain` from BOUNDARY.md. Then:
+Read `specification.allowed_chains`, `cross_chain`, and `payment_rails` from BOUNDARY.md. Then apply this routing priority:
 
 ---
 
-**If `command.chain` is in `specification.allowed_chains` (polygon, arbitrum):**
+**STEP A — Rail Payment (highest priority when no chain specified):**
 
-Spawn sub-agent via `sessions_spawn`:
-```
-Run the following command and return the JSON output:
-
-npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
-  --chain "[chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet]" \
-  --business "[business_name]" \
-  --business-id "[business_id]"
-```
-Then spawn tx-monitor. Return `status: "executed"` with the link URL.
-
----
-
-**If `command.chain` is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`:**
-
-⚠️ DO NOT run generate-payment-link.ts. DO NOT run monitor-transaction.ts.
-
-Spawn sub-agent via `sessions_spawn`:
-```
-Run the following command and return the JSON output:
-
-npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
-  --source-chain "[chain]" \
-  --settlement-chain "[cross_chain.bridge.settlement_chain]" \
-  --token "[token]" \
-  --amount [amount] \
-  --wallet "[wallet]" \
-  --business "[business_name]" \
-  --business-id "[business_id]"
-```
-Then spawn a second sub-agent:
-```
-Run the following command and return the JSON output when it completes:
-
-npx tsx $RAILCLAW_SCRIPTS_DIR/monitor-solana-deposit.ts \
-  --payment-id "[payment_id from bridge-payment output]" \
-  --settlement-chain "[settlement_chain]" \
-  --timeout 7200 \
-  --poll-interval 30
-```
-Return `status: "bridge_payment"` with the `bridge_instructions` from bridge-payment.ts output (includes the Solana `deposit_address`).
-
----
-
-**If chain is in neither list, or bridge is disabled:**
-Return `status: "rejected"` with `violation: "chain"`.
-
----
-
-**If `command.rail` is `nanopayment` or `agent_card`, OR the command is about paying for a service (not a wallet transfer):**
+If `command.chain` is NOT provided AND (`command.rail` is `nanopayment` or `agent_card` OR no explicit chain was mentioned), check `payment_rails`:
 
 Check `payment_rails` section of BOUNDARY.md. These rails pay a service URL, not a wallet.
 
@@ -119,6 +67,57 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/agent-card-payment.ts \
 Note: `--card-id` is optional. If `payment_rails.agent_card.card_id` is non-empty, add `--card-id "[card_id]"`. If blank, omit it — the script auto-provisions a card.
 
 Return `status: "rail_payment"` with the script output and `rail` field set to which rail was used.
+
+---
+
+**STEP B — Payment Link (chain explicitly provided):**
+
+If `command.chain` is in `specification.allowed_chains` (polygon, arbitrum):
+
+Spawn sub-agent via `sessions_spawn`:
+```
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/generate-payment-link.ts \
+  --chain "[chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
+```
+Then spawn tx-monitor. Return `status: "executed"` with the link URL.
+
+---
+
+**STEP C — Bridge Payment (chain is solana and bridge is enabled):**
+
+If `command.chain` is in `cross_chain.user_payable_chains` (e.g. solana) AND `cross_chain.bridge.enabled = true`:
+
+⚠️ DO NOT run generate-payment-link.ts. DO NOT run monitor-transaction.ts.
+
+Spawn sub-agent via `sessions_spawn`:
+```
+Run the following command and return the JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/bridge-payment.ts \
+  --source-chain "[chain]" \
+  --settlement-chain "[cross_chain.bridge.settlement_chain]" \
+  --token "[token]" \
+  --amount [amount] \
+  --wallet "[wallet]" \
+  --business "[business_name]" \
+  --business-id "[business_id]"
+```
+Then spawn monitor-solana-deposit.ts sub-agent. Return `status: "bridge_payment"`.
+
+---
+
+**STEP D — Reject:**
+
+If no route matched, return `status: "rejected"` with appropriate `violation`.
+
+---
 
 ### 4. Ephemeral Sub-Agents
 
