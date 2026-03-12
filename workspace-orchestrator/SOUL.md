@@ -87,6 +87,38 @@ Return `status: "bridge_payment"` with the `bridge_instructions` from bridge-pay
 **If chain is in neither list, or bridge is disabled:**
 Return `status: "rejected"` with `violation: "chain"`.
 
+---
+
+**If `command.rail` is `nanopayment` or `agent_card`, OR the command is about paying for a service (not a wallet transfer):**
+
+Check `payment_rails` section of BOUNDARY.md. These rails pay a service URL, not a wallet.
+
+**Rail selection** (if agent didn't specify, payclaw decides):
+1. `payment_rails.nanopayment.enabled = true` → use **nanopayment** (preferred)
+2. else `payment_rails.agent_card.enabled = true` → use **agent_card**
+3. else → `status: "rejected"`, `violation: "no_rail_enabled"`
+
+**[nanopayment]** — Circle Gateway gasless USDC. Spawn sub-agent:
+```
+Run and return full JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/nanopayment.ts \
+  --url "[command.service_url]" \
+  --chain "[payment_rails.nanopayment.chain]"
+```
+
+**[agent_card]** — AgentCard prepaid Visa. Spawn sub-agent:
+```
+Run and return full JSON output:
+
+npx tsx $RAILCLAW_SCRIPTS_DIR/agent-card-payment.ts \
+  --card-id "[payment_rails.agent_card.card_id]" \
+  --amount [command.amount] \
+  --description "[command.description or service name]"
+```
+
+Return `status: "rail_payment"` with the script output and `rail` field set to which rail was used.
+
 ### 4. Ephemeral Sub-Agents
 
 For execution tasks (payment links, tx monitoring), spawn sub-agents via `sessions_spawn`. Sub-agents:

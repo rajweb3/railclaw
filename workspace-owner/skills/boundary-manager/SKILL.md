@@ -28,10 +28,15 @@ metadata: {}
 | `/boundary set-bridge off` | Disable bridging |
 | `/boundary set-payable-chain add <chain>` | Add a user-payable source chain (e.g. solana) |
 | `/boundary set-payable-chain remove <chain>` | Remove a user-payable source chain |
+| `/boundary set-rail nanopayment on <seller-address> [chain]` | Enable Circle Gateway nanopayment; business receives USDC at seller-address |
+| `/boundary set-rail nanopayment off` | Disable nanopayment rail |
+| `/boundary set-rail agent-card on <card-id>` | Enable AgentCard Visa rail with given prepaid card ID |
+| `/boundary set-rail agent-card off` | Disable AgentCard rail |
 
 **Settlement chains** (where the business receives funds): `polygon`, `arbitrum`
 **User-payable chains** (where users can originate payments from): `solana`
 **Valid tokens**: `USDC`, `USDT`, `DAI`, `WETH`
+**Valid nanopayment chains**: `arcTestnet` (testnet), `base`, `baseSepolia`, `arbitrumSepolia`
 
 ## Bridge Configuration Rules
 
@@ -44,6 +49,24 @@ When `/boundary set-bridge on <settlement-chain>` is called:
 When `/boundary set-bridge off` is called:
 1. Set `cross_chain.bridge.enabled: false`
 2. Leave `user_payable_chains` intact (user may re-enable later)
+
+## Payment Rail Configuration Rules
+
+When `/boundary set-rail nanopayment on <seller-address> [chain]` is called:
+1. Set `payment_rails.nanopayment.enabled: true`
+2. Set `payment_rails.nanopayment.seller_address: <seller-address>`
+3. Set `payment_rails.nanopayment.chain: <chain>` (default: `arcTestnet`)
+4. Validate seller-address starts with `0x` — reject if not a valid EVM address format
+
+When `/boundary set-rail nanopayment off` is called:
+1. Set `payment_rails.nanopayment.enabled: false`
+
+When `/boundary set-rail agent-card on <card-id>` is called:
+1. Set `payment_rails.agent_card.enabled: true`
+2. Set `payment_rails.agent_card.card_id: <card-id>`
+
+When `/boundary set-rail agent-card off` is called:
+1. Set `payment_rails.agent_card.enabled: false`
 
 ## On Every Change
 1. Increment `version`

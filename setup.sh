@@ -43,6 +43,11 @@ if ! command -v tsx &>/dev/null; then
   npm install -g tsx
 fi
 
+if ! command -v agent-cards &>/dev/null; then
+  echo "  Installing agent-cards CLI globally..."
+  npm install -g agent-cards
+fi
+
 echo "  Node.js: $NODE_VERSION"
 echo "  OpenClaw: $(openclaw --version 2>/dev/null || echo 'installed')"
 echo "  OK"
@@ -68,6 +73,14 @@ if [[ -n "$MISSING" ]]; then
   echo "ERROR: Missing env vars:$MISSING"
   exit 1
 fi
+
+# Auto-generate OPENCLAW_GATEWAY_TOKEN if not set
+if [[ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+  OPENCLAW_GATEWAY_TOKEN=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+  echo "OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}" >> "$RAILCLAW_DIR/.env"
+  echo "  Generated OPENCLAW_GATEWAY_TOKEN (saved to .env)"
+fi
+
 echo "  OK"
 
 # --- Step 3: Install script dependencies ---
@@ -98,8 +111,9 @@ echo "[5/6] Setting up OpenClaw workspaces..."
 sed \
   -e "s|\${TELEGRAM_BOT_TOKEN_OWNER}|${TELEGRAM_BOT_TOKEN_OWNER}|g" \
   -e "s|\${TELEGRAM_BOT_TOKEN_PRODUCT}|${TELEGRAM_BOT_TOKEN_PRODUCT}|g" \
+  -e "s|\${OPENCLAW_GATEWAY_TOKEN}|${OPENCLAW_GATEWAY_TOKEN}|g" \
   "$RAILCLAW_DIR/openclaw.json" > "$OPENCLAW_HOME/openclaw.json"
-echo "  Config written with bot tokens substituted"
+echo "  Config written with tokens substituted"
 
 # --- workspace-owner ---
 OWNER_WS="$OPENCLAW_HOME/workspace-owner"
@@ -165,6 +179,14 @@ echo "" >> "$ENV_FILE"
 echo "RAILCLAW_DATA_DIR=$RAILCLAW_DIR/shared/data" >> "$ENV_FILE"
 echo "RAILCLAW_SCRIPTS_DIR=$RAILCLAW_DIR/shared/scripts" >> "$ENV_FILE"
 
+# Install demo dependencies
+echo ""
+echo "  Installing demo server dependencies..."
+cd "$RAILCLAW_DIR/demo"
+npm install --production 2>/dev/null || npm install
+cd "$RAILCLAW_DIR"
+echo "  OK"
+
 # Single service — one OpenClaw instance, two agents
 # Note: Bot tokens are hardcoded in openclaw.json (not env vars)
 # EnvironmentFile is still needed for RPC endpoints, encryption keys, etc.
@@ -190,10 +212,34 @@ SyslogIdentifier=railclaw
 WantedBy=multi-user.target
 SERVICEEOF
 
+DEMO_PORT_VAL="${DEMO_PORT:-3100}"
+sudo tee /etc/systemd/system/railclaw-demo.service > /dev/null <<SERVICEEOF
+[Unit]
+Description=Railclaw Demo UI
+After=railclaw.service
+Wants=railclaw.service
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$RAILCLAW_DIR/demo
+EnvironmentFile=$ENV_FILE
+ExecStart=$(which tsx) server.ts
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=railclaw-demo
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
 sudo systemctl daemon-reload
 sudo systemctl enable railclaw
+sudo systemctl enable railclaw-demo
 
-echo "  Systemd service installed: railclaw"
+echo "  Systemd services installed: railclaw, railclaw-demo"
 
 echo ""
 echo "=========================================="
@@ -214,7 +260,13 @@ echo ""
 echo "  4. View logs:"
 echo "     journalctl -u railclaw -f"
 echo ""
-echo "  5. Message your Telegram bots to test!"
+echo "  5. Start the demo UI:"
+echo "     sudo systemctl start railclaw-demo"
+echo ""
+echo "  6. Open demo UI in browser:"
+echo "     http://$(curl -s http://checkip.amazonaws.com 2>/dev/null || echo 'YOUR_EC2_IP'):${DEMO_PORT:-3100}"
+echo ""
+echo "  7. Message your Telegram bots to test!"
 echo ""
 echo "  Structure under ~/.openclaw/:"
 echo "    openclaw.json              ← main config (3 agents, 2 Telegram bots)"

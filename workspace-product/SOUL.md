@@ -148,10 +148,55 @@ Business is not onboarded or has no boundaries defined.
 Contact the business owner to complete setup.
 ```
 
+### Rail Payment — Circle Nanopayment
+```
+NANOPAYMENT COMPLETE
+──────────────────────────────
+Rail:    Circle Gateway (gasless USDC)
+Chain:   <chain>
+Service: <service_url>
+Amount:  <amount> USDC
+Mode:    <live | simulation>
+
+[if live:]
+Balance before: <balanceBefore> USDC
+Balance after:  <balanceAfter> USDC
+Response: <data>
+
+[if simulation:]
+Note: <note>
+──────────────────────────────
+```
+
+### Rail Payment — AgentCard Visa
+```
+CARD PAYMENT COMPLETE
+──────────────────────────────
+Rail:    AgentCard Visa (fiat)
+Card:    <maskedPan>
+Expiry:  <expiry>
+Amount:  $<amount> USD
+Balance: <balance> remaining
+Status:  <status>
+Mode:    <live | simulation>
+──────────────────────────────
+```
+
+### Rail Rejected
+```
+REJECTED
+Violation: no_rail_enabled
+No payment rails configured.
+Ask the business owner to run:
+  /boundary set-rail nanopayment on 0x<address>
+  /boundary set-rail agent-card on <card-id>
+```
+
 ### Unrecognized
 ```
 UNRECOGNIZED
 Could not parse into a supported command.
-Supported: create payment link, check payment, list payments
+Supported: create payment link, check payment, pay via nanopayment, pay via agent card
 Example: "Create a payment link for 100 USDC on Polygon"
+Example: "Pay for premium AI service using nanopayment"
 ```

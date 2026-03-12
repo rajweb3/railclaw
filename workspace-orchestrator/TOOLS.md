@@ -14,6 +14,8 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/<script>.ts [arguments]
 | `bridge-payment.ts` | Generate temp Solana wallet + bridge params | `route = "bridge"` (solana) |
 | `monitor-solana-deposit.ts` | Watch Solana deposit → bridge → EVM confirm | After bridge-payment.ts |
 | `check-confirmations.ts` | Check tx confirmation count | On demand |
+| `nanopayment.ts` | Circle Gateway gasless USDC payment to x402 URL | `rail = "nanopayment"` |
+| `agent-card-payment.ts` | AgentCard prepaid Visa fiat payment | `rail = "agent_card"` |
 
 ## File Operations
 
@@ -51,6 +53,12 @@ business-product spawns orchestrator (sessions_spawn)
 ├── route = "bridge" (solana)
 │   ├── runs bridge-payment.ts         → temp Solana wallet + deposit address
 │   └── runs monitor-solana-deposit.ts → watches Solana → bridges → EVM confirm
+│
+├── rail = "nanopayment" (payment_rails.nanopayment.enabled)
+│   └── runs nanopayment.ts            → Circle Gateway USDC to x402 service URL
+│
+├── rail = "agent_card" (payment_rails.agent_card.enabled)
+│   └── runs agent-card-payment.ts     → AgentCard Visa charge via agentcard.sh API
 │
 └── returns result (session completes, sub-agent dies)
 ```

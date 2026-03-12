@@ -46,3 +46,15 @@ bridge:
   provider: "across"             # Bridge provider (only "across" is supported)
   settlement_chain: "polygon"    # Must be one of allowed_chains — where bridge funds settle
 ```
+
+## payment_rails
+```yaml
+agent_card:
+  enabled: false
+  card_id: ""                    # agentcard.sh card ID (run: agent-cards cards list)
+
+nanopayment:
+  enabled: false
+  chain: "arcTestnet"            # Circle Gateway chain: arcTestnet | base-sepolia | base
+  seller_address: ""             # Business EVM wallet to receive USDC via Circle Gateway
+```
