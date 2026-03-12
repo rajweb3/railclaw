@@ -15,6 +15,7 @@
 import express, { Request, Response } from 'express';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.DEMO_PORT || '3100');
@@ -28,7 +29,6 @@ const SELLER_ADDRESS = process.env.CIRCLE_SELLER_ADDRESS || '';
 
 const app = express();
 app.use(express.json());
-app.use(express.static(resolve(__dirname, 'public')));
 
 // ─── Proxy: browser → OpenClaw gateway ───────────────────────────────────────
 //
@@ -159,6 +159,17 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 async function main() {
   await setupX402();
+
+  // Serve Vite build in production. In dev, Vite handles the frontend.
+  const distDir = resolve(__dirname, 'dist');
+  if (existsSync(distDir)) {
+    app.use(express.static(distDir));
+    // SPA fallback — must be after all API routes
+    app.get(/^(?!\/api)/, (_req: Request, res: Response) => {
+      res.sendFile(resolve(distDir, 'index.html'));
+    });
+  }
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  Railclaw Demo UI  →  http://0.0.0.0:${PORT}`);
     console.log('  Left panel  : Business owner → sends to business-owner agent');

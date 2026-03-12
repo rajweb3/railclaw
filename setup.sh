@@ -179,11 +179,13 @@ echo "" >> "$ENV_FILE"
 echo "RAILCLAW_DATA_DIR=$RAILCLAW_DIR/shared/data" >> "$ENV_FILE"
 echo "RAILCLAW_SCRIPTS_DIR=$RAILCLAW_DIR/shared/scripts" >> "$ENV_FILE"
 
-# Install demo dependencies
+# Install demo dependencies and build React app
 echo ""
-echo "  Installing demo server dependencies..."
+echo "  Installing demo dependencies (React + Vite + Express)..."
 cd "$RAILCLAW_DIR/demo"
-npm install --production 2>/dev/null || npm install
+npm install
+echo "  Building React app..."
+npm run build
 cd "$RAILCLAW_DIR"
 echo "  OK"
 

@@ -117,7 +117,16 @@
     port: 18789,
     bind: "loopback",
     auth: {
-      mode: "token"
+      mode: "token",
+      token: "${OPENCLAW_GATEWAY_TOKEN}"
+    },
+    http: {
+      endpoints: {
+        // Enable the OpenResponses HTTP API so the demo UI can talk to agents
+        responses: {
+          enabled: true
+        }
+      }
     }
   }
 }
