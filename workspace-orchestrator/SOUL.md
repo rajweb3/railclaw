@@ -112,10 +112,10 @@ npx tsx $RAILCLAW_SCRIPTS_DIR/nanopayment.ts \
 Run and return full JSON output:
 
 npx tsx $RAILCLAW_SCRIPTS_DIR/agent-card-payment.ts \
-  --card-id "[payment_rails.agent_card.card_id]" \
   --amount [command.amount] \
   --description "[command.description or service name]"
 ```
+Note: `--card-id` is optional. If `payment_rails.agent_card.card_id` is non-empty, add `--card-id "[card_id]"`. If blank, omit it — the script auto-provisions a card.
 
 Return `status: "rail_payment"` with the script output and `rail` field set to which rail was used.
 

@@ -30,7 +30,7 @@ metadata: {}
 | `/boundary set-payable-chain remove <chain>` | Remove a user-payable source chain |
 | `/boundary set-rail nanopayment on <seller-address> [chain]` | Enable Circle Gateway nanopayment; business receives USDC at seller-address |
 | `/boundary set-rail nanopayment off` | Disable nanopayment rail |
-| `/boundary set-rail agent-card on <card-id>` | Enable AgentCard Visa rail with given prepaid card ID |
+| `/boundary set-rail agent-card on [card-id]` | Enable AgentCard Visa rail; card-id optional (auto-provisioned if omitted) |
 | `/boundary set-rail agent-card off` | Disable AgentCard rail |
 
 **Settlement chains** (where the business receives funds): `polygon`, `arbitrum`
@@ -61,9 +61,9 @@ When `/boundary set-rail nanopayment on <seller-address> [chain]` is called:
 When `/boundary set-rail nanopayment off` is called:
 1. Set `payment_rails.nanopayment.enabled: false`
 
-When `/boundary set-rail agent-card on <card-id>` is called:
+When `/boundary set-rail agent-card on [card-id]` is called:
 1. Set `payment_rails.agent_card.enabled: true`
-2. Set `payment_rails.agent_card.card_id: <card-id>`
+2. If card-id provided, set `payment_rails.agent_card.card_id: <card-id>`; otherwise leave card_id as `""` (auto-provisioned at payment time)
 
 When `/boundary set-rail agent-card off` is called:
 1. Set `payment_rails.agent_card.enabled: false`

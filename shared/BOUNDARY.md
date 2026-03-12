@@ -51,7 +51,7 @@ bridge:
 ```yaml
 agent_card:
   enabled: false
-  card_id: ""                    # agentcard.sh card ID (run: agent-cards cards list)
+  card_id: ""                    # optional — auto-provisioned if blank
 
 nanopayment:
   enabled: false
