@@ -7,7 +7,11 @@
   agents: {
     defaults: {
       model: {
-        primary: "anthropic/claude-sonnet-4-5"
+        primary: "meta-llama/llama-3.3-70b-instruct:free",
+        provider: {
+          baseUrl: "https://openrouter.ai/api/v1",
+          apiKey: "${OPENROUTER_API_KEY}"
+        }
       }
     },
     list: [
