@@ -176,6 +176,14 @@ header {
 .ph-badge-left  { background: var(--blue-dim);  color: var(--blue);  border: 1px solid var(--blue-border); }
 .ph-badge-right { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
 
+.clear-btn {
+  background: none; border: none; color: var(--muted);
+  font-size: 11px; cursor: pointer; padding: 2px 5px;
+  border-radius: 4px; line-height: 1; margin-left: 4px;
+  transition: color 0.15s;
+}
+.clear-btn:hover { color: var(--red); }
+
 /* ── Status strip (below each panel header) ──────────────────────────────────── */
 
 .status-strip {

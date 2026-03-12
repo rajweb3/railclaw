@@ -132,7 +132,7 @@ interface PanelProps {
 }
 
 export function ChatPanel({ side, title, subtitle, agentBadge, avatar, endpoint, placeholder }: PanelProps) {
-  const { messages, status, busy, send } = useChat(endpoint)
+  const { messages, status, busy, send, clearHistory } = useChat(endpoint)
   const [input, setInput] = useState('')
   const feedRef   = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
@@ -176,6 +176,9 @@ export function ChatPanel({ side, title, subtitle, agentBadge, avatar, endpoint,
           <div className="ph-sub">{subtitle}</div>
         </div>
         <div className={`ph-badge ph-badge-${side}`}>{agentBadge}</div>
+        {messages.length > 0 && (
+          <button className="clear-btn" onClick={clearHistory} title="Clear history">✕</button>
+        )}
       </div>
 
       {/* Status strip */}

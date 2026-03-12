@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import type { Msg, ChatStatus, StepKind, StatusState } from './types'
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ type Action =
   | { type: 'SETTLE_STEP';     id: string; stepKind?: StepKind; body?: string }
   | { type: 'SET_STATUS';      status: ChatStatus }
   | { type: 'SET_BUSY';        busy: boolean }
+  | { type: 'CLEAR' }
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -65,6 +66,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, status: action.status }
     case 'SET_BUSY':
       return { ...state, busy: action.busy }
+    case 'CLEAR':
+      return { messages: [], status: { state: 'idle', text: 'idle' }, busy: false }
   }
 }
 
@@ -96,17 +99,50 @@ function detectTool(text: string): 'spawn' | 'script' | 'boundary' | null {
   return null
 }
 
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+function storageKey(endpoint: string) {
+  return `railclaw:chat:${endpoint.replace(/\W/g, '_')}`
+}
+
+function loadMessages(endpoint: string): Msg[] {
+  try {
+    const raw = localStorage.getItem(storageKey(endpoint))
+    if (!raw) return []
+    const msgs = JSON.parse(raw) as Msg[]
+    // Finalize any items that were mid-stream when page was closed
+    return msgs.map(m => {
+      if (m.kind === 'agent' && m.streaming) return { ...m, streaming: false }
+      if (m.kind === 'step'  && m.active)    return { ...m, active: false }
+      return m
+    })
+  } catch {
+    return []
+  }
+}
+
+function saveMessages(endpoint: string, messages: Msg[]) {
+  try {
+    localStorage.setItem(storageKey(endpoint), JSON.stringify(messages))
+  } catch { /* storage full — ignore */ }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 let _idSeq = 0
 const uid = () => `m${++_idSeq}`
 
 export function useChat(endpoint: string) {
-  const [state, dispatch] = useReducer(reducer, {
-    messages: [],
-    status: { state: 'idle', text: 'idle' },
+  const [state, dispatch] = useReducer(reducer, undefined, () => ({
+    messages: loadMessages(endpoint),
+    status: { state: 'idle' as const, text: 'idle' },
     busy: false,
-  })
+  }))
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    saveMessages(endpoint, state.messages)
+  }, [endpoint, state.messages])
 
   // Track in-flight streaming IDs via ref (stable across renders)
   const streamRef = useRef({
@@ -307,5 +343,10 @@ export function useChat(endpoint: string) {
     }
   }, [endpoint, state.busy, setStatus, resetStatusLater])
 
-  return { messages: state.messages, status: state.status, busy: state.busy, send }
+  const clearHistory = useCallback(() => {
+    localStorage.removeItem(storageKey(endpoint))
+    dispatch({ type: 'CLEAR' })
+  }, [endpoint])
+
+  return { messages: state.messages, status: state.status, busy: state.busy, send, clearHistory }
 }
