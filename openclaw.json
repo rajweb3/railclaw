@@ -4,14 +4,28 @@
   // Agent 2: business-product (payment commands — delegates to orchestrator)
   // Agent 3: orchestrator (central coordination — boundary enforcement + execution)
 
+  models: {
+    providers: {
+      openrouter: {
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: "${OPENROUTER_API_KEY}",
+        api: "openai-completions",
+        models: [
+          {
+            id: "meta-llama/llama-3.3-70b-instruct:free",
+            name: "Llama 3.3 70B (free)",
+            contextWindow: 131072,
+            maxTokens: 8192
+          }
+        ]
+      }
+    }
+  },
+
   agents: {
     defaults: {
       model: {
-        primary: "meta-llama/llama-3.3-70b-instruct:free",
-        provider: {
-          baseUrl: "https://openrouter.ai/api/v1",
-          apiKey: "${OPENROUTER_API_KEY}"
-        }
+        primary: "openrouter/meta-llama/llama-3.3-70b-instruct:free"
       }
     },
     list: [
