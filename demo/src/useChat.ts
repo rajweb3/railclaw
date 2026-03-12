@@ -248,9 +248,14 @@ export function useChat(endpoint: string) {
           }
 
           // ── text delta ─────────────────────────────────────────────────────
-          const chunk = (data?.delta as Record<string, unknown>)?.text as string
-                     ?? (data?.delta as Record<string, unknown>)?.value as string
-                     ?? null
+          // OpenClaw sends delta as a plain string: {"delta":"text"}
+          // Anthropic SDK sends delta as object: {"delta":{"text":"..."}}
+          const rawDelta = data?.delta
+          const chunk = typeof rawDelta === 'string'
+            ? rawDelta
+            : (rawDelta as Record<string, unknown>)?.text as string
+              ?? (rawDelta as Record<string, unknown>)?.value as string
+              ?? null
 
           if (chunk) {
             if (ref.inThinking && ref.thinkingId) {
