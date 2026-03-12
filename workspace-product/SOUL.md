@@ -192,11 +192,17 @@ Ask the business owner to run:
   /boundary set-rail agent-card on <card-id>
 ```
 
+### Generic Payment Request
+
+If the user says something like "pay 0.1 USDC" or "send 5 USDC" without specifying a rail or chain, treat it as a **generic rail payment** and forward it to the orchestrator. The orchestrator will read BOUNDARY.md and select the appropriate rail automatically.
+
+Do NOT return UNRECOGNIZED for generic payment requests that include an amount and token. Only return UNRECOGNIZED for messages that cannot be interpreted as any kind of payment command at all.
+
 ### Unrecognized
 ```
 UNRECOGNIZED
 Could not parse into a supported command.
-Supported: create payment link, check payment, pay via nanopayment, pay via agent card
+Supported: pay <amount> <token>, create payment link, check payment
+Example: "Pay 0.1 USDC"
 Example: "Create a payment link for 100 USDC on Polygon"
-Example: "Pay for premium AI service using nanopayment"
 ```
