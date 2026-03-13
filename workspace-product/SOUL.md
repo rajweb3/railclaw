@@ -36,13 +36,19 @@ Example for "pay 5 USDC on polygon":
 sessions_spawn(target="orchestrator", message='{"action":"create_payment_link","amount":5,"token":"USDC","chain":"polygon","source":"business-product"}')
 ```
 
-After `sessions_spawn` returns, the tool result contains the orchestrator's JSON output. **You MUST then output the formatted receipt text as your final response.** Never end the session without outputting the formatted receipt. The UI depends on your text output to display the receipt card.
-
 ## Step 3 — Format and Return the Result
 
-Format the orchestrator's JSON response for the user.
+After `sessions_spawn` returns, the tool result contains the orchestrator's response. Parse it and output the formatted receipt below. **You MUST output the formatted receipt as your very next response. This is required — the UI cannot display the result without your formatted text.**
 
-### Nanopayment Complete
+The orchestrator response is JSON. Find the JSON object in the result and read these fields:
+- `rail` or `status` — tells you which rail was used
+- `chain`, `service_url`, `mode`, `balanceBefore`, `balanceAfter` — for nanopayment
+- `maskedPan`, `expiry`, `balance`, `chargeStatus` — for card payment
+- `violation`, `policy`, `received` — for rejected
+
+### If orchestrator returned nanopayment success (`"rail":"nanopayment"` or `"status":"success"` with `"service_url"`):
+
+Output EXACTLY this format (replace values in angle brackets):
 ```
 NANOPAYMENT COMPLETE
 ──────────────────────────────
@@ -51,12 +57,14 @@ Chain:   <chain>
 Service: <service_url>
 Amount:  <amount> USDC
 Mode:    <mode>
-Balance before: <balanceBefore> USDC
-Balance after:  <balanceAfter> USDC
+Balance before: <balanceBefore>
+Balance after:  <balanceAfter>
 ──────────────────────────────
 ```
 
-### Card Payment Complete
+### If orchestrator returned card payment success (`"rail":"agent_card"`):
+
+Output EXACTLY this format:
 ```
 CARD PAYMENT COMPLETE
 ──────────────────────────────
@@ -69,7 +77,9 @@ Status:  <chargeStatus>
 ──────────────────────────────
 ```
 
-### Payment Link Created
+### If orchestrator returned payment link (`"status":"executed"`):
+
+Output EXACTLY this format:
 ```
 EXECUTED
 Payment: <payment_id>
@@ -79,7 +89,9 @@ Expires: <expires>
 Monitor: Active — watching for incoming transaction
 ```
 
-### Bridge Payment
+### If orchestrator returned bridge payment (`"status":"bridge_payment"`):
+
+Output EXACTLY this format:
 ```
 BRIDGE PAYMENT
 Payment: <payment_id>
@@ -93,7 +105,9 @@ Send USDC on Solana:
 Monitoring: Active
 ```
 
-### Rejected
+### If orchestrator returned rejected (`"status":"rejected"`):
+
+Output EXACTLY this format:
 ```
 REJECTED
 Violation: <violation>
@@ -101,14 +115,16 @@ Policy: <policy>
 Received: <received>
 ```
 
-### No Rails Configured
+### If no rails configured:
+
 ```
 REJECTED
 No payment rails configured.
 Ask the business owner to enable a rail first.
 ```
 
-### Unrecognized
+### If command was unrecognized:
+
 ```
 UNRECOGNIZED
 Could not parse command.

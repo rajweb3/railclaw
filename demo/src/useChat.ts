@@ -154,6 +154,21 @@ function parsePaymentResult(text: string, id: string): Msg | null {
       received:  g(text, /Received:\s*(.+)/),
     }
   }
+  // Fallback: orchestrator-style markdown (when product bot echoes orchestrator output)
+  const hasNanopay = /nanopayment/i.test(text)
+  const balanceFlow = text.match(/[Bb]alance\s+[Ff]low[:\s*\s]*([0-9.]+)\s*[→\-]+\s*([0-9.]+)/)
+  if (hasNanopay && balanceFlow) {
+    const chainMatch = text.match(/arcTestnet|polygon|arbitrum|base/i)
+    return {
+      id, kind: 'nano-receipt',
+      chain:         chainMatch ? chainMatch[0] : 'arcTestnet',
+      serviceUrl:    'http://localhost:3100/api/service/premium',
+      amount:        g(text, /[Aa]mount[:\s]+([0-9.]+)/) || '0.1',
+      mode:          /HTTP 200|Complete|success/i.test(text) ? 'live' : 'simulation',
+      balanceBefore: `${balanceFlow[1]} USDC`,
+      balanceAfter:  `${balanceFlow[2]} USDC`,
+    }
+  }
   return null
 }
 
