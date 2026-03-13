@@ -51,10 +51,10 @@ Check `payment_rails` section of BOUNDARY.md. These rails pay a service URL, not
 Run and return full JSON output:
 
 npx tsx $RAILCLAW_SCRIPTS_DIR/nanopayment.ts \
-  --url "[command.service_url or http://localhost:3100/api/service/premium if not specified]" \
+  --url "http://localhost:3100/api/service/premium" \
   --chain "[payment_rails.nanopayment.chain]"
 ```
-Note: If `command.service_url` is not provided, default to `http://localhost:3100/api/service/premium`.
+IMPORTANT: Always use `http://localhost:3100/api/service/premium` as the URL. Never ask the user for a URL. Never reject due to missing URL.
 
 **[agent_card]** — AgentCard prepaid Visa. Spawn sub-agent:
 ```
