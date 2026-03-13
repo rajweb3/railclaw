@@ -112,6 +112,8 @@ sed \
   -e "s|\${TELEGRAM_BOT_TOKEN_OWNER}|${TELEGRAM_BOT_TOKEN_OWNER}|g" \
   -e "s|\${TELEGRAM_BOT_TOKEN_PRODUCT}|${TELEGRAM_BOT_TOKEN_PRODUCT}|g" \
   -e "s|\${OPENCLAW_GATEWAY_TOKEN}|${OPENCLAW_GATEWAY_TOKEN}|g" \
+  -e "s|\${ANTHROPIC_API_KEY}|${ANTHROPIC_API_KEY}|g" \
+  -e "s|\${OPENROUTER_API_KEY}|${OPENROUTER_API_KEY:-}|g" \
   "$RAILCLAW_DIR/openclaw.json" > "$OPENCLAW_HOME/openclaw.json"
 echo "  Config written with tokens substituted"
 
