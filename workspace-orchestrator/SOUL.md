@@ -37,7 +37,7 @@ Read `specification.allowed_chains`, `cross_chain`, and `payment_rails` from BOU
 
 **STEP A — Rail Payment (highest priority when no chain specified):**
 
-If `command.chain` is NOT provided AND (`command.rail` is `nanopayment` or `agent_card` OR no explicit chain was mentioned), check `payment_rails`:
+If `command.action` is `rail_payment` OR `command.chain` is NOT provided AND (`command.rail` is `nanopayment` or `agent_card` OR no explicit chain was mentioned), check `payment_rails`:
 
 Check `payment_rails` section of BOUNDARY.md. These rails pay a service URL, not a wallet.
 

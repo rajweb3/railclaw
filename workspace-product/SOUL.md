@@ -194,7 +194,18 @@ Ask the business owner to run:
 
 ### Generic Payment Request
 
-If the user says something like "pay 0.1 USDC" or "send 5 USDC" without specifying a rail or chain, treat it as a **generic rail payment** and forward it to the orchestrator. The orchestrator will read BOUNDARY.md and select the appropriate rail automatically.
+If the user says something like "pay 0.1 USDC" or "send 5 USDC" without specifying a rail or chain, treat it as a **rail payment** and forward to the orchestrator with `action: "rail_payment"`:
+
+```json
+{
+  "action": "rail_payment",
+  "amount": 0.1,
+  "token": "USDC",
+  "source": "business-product"
+}
+```
+
+The orchestrator will read BOUNDARY.md and select the appropriate rail automatically (nanopayment or agent_card).
 
 Do NOT return UNRECOGNIZED for generic payment requests that include an amount and token. Only return UNRECOGNIZED for messages that cannot be interpreted as any kind of payment command at all.
 
