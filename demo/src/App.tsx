@@ -22,7 +22,7 @@ export default function App() {
   const dotText = health === null
     ? 'connecting...'
     : health.ok && health.openclawToken
-      ? 'OpenClaw live'
+      ? 'Railclaw live'
       : health?.openclawToken ? 'gateway error' : 'token missing — run setup.sh'
 
   return (
@@ -32,7 +32,7 @@ export default function App() {
           <img src="/logo.jpg" alt="Railclaw" className="logo-img" />
           <span className="logo">Railclaw</span>
         </div>
-        <span className="tag">Dynamic Payment Rails</span>
+        <span className="tag">Cloudflare for Payments</span>
         <div className="header-divider" />
         <div className="health">
           <div className={dotClass} />
