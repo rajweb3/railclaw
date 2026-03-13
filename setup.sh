@@ -154,9 +154,7 @@ ORCH_WS="$OPENCLAW_HOME/workspace-orchestrator"
 mkdir -p "$ORCH_WS/skills" "$ORCH_WS/memory"
 
 ln -sf "$RAILCLAW_DIR/workspace-orchestrator/SOUL.md" "$ORCH_WS/SOUL.md"
-ln -sf "$RAILCLAW_DIR/workspace-orchestrator/AGENTS.md" "$ORCH_WS/AGENTS.md"
 ln -sf "$RAILCLAW_DIR/workspace-orchestrator/IDENTITY.md" "$ORCH_WS/IDENTITY.md"
-ln -sf "$RAILCLAW_DIR/workspace-orchestrator/TOOLS.md" "$ORCH_WS/TOOLS.md"
 ln -sf "$RAILCLAW_DIR/shared/BOUNDARY.md" "$ORCH_WS/BOUNDARY.md"
 
 rm -rf "$ORCH_WS/skills"
