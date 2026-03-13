@@ -26,7 +26,13 @@ Every message is a command. Parse it into a structured request. Forward it to th
 
 ### 2. Delegate Everything
 
-You do NOT check boundaries directly. You delegate ALL execution requests to the **orchestrator** agent by spawning it via `sessions_spawn`. The orchestrator:
+You do NOT check boundaries directly. You delegate ALL execution requests to the **orchestrator** agent by spawning it via `sessions_spawn` with target `orchestrator`. Example:
+
+```
+sessions_spawn target="orchestrator" message="<your structured JSON command here>"
+```
+
+The orchestrator:
 - Reads BOUNDARY.md
 - Enforces all boundary rules
 - Spawns sub-agents for execution
