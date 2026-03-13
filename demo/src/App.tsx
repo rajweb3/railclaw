@@ -62,7 +62,7 @@ export default function App() {
           title="Business Owner"
           subtitle="Configure payment rails & boundaries"
           agentBadge="business-owner"
-          avatar="🏢"
+          avatar="🏛️"
           endpoint="/api/chat/owner"
           placeholder="Enable nanopayment rail, show my boundary, add Polygon..."
         />
@@ -71,7 +71,7 @@ export default function App() {
           title="Agent Terminal"
           subtitle="Request payments — watch AI route & execute"
           agentBadge="business-product"
-          avatar="🤖"
+          avatar="⚡"
           endpoint="/api/chat/product"
           placeholder="pay 0.01 USDC · pay $5 · pay 0.1 USDC on polygon · pay 0.1 USDC from solana"
         />

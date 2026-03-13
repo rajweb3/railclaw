@@ -12,6 +12,55 @@ const STEP_CLASSES: Record<string, string> = {
   error:  'step step-error',
 }
 
+// ── Typewriter hook ───────────────────────────────────────────────────────────
+
+const LEFT_HINTS = [
+  'show my boundary',
+  'enable polygon rail',
+  'set max payment to $500',
+  'add arbitrum as settlement chain',
+  'enable bridge from solana',
+  'show wallet address',
+]
+
+const RIGHT_HINTS = [
+  'pay 0.01 USDC',
+  'pay $5 via card',
+  'pay 0.1 USDC on polygon',
+  'pay 0.1 USDC from solana',
+  'pay 50 USDC on arbitrum',
+]
+
+function useTypewriter(hints: string[]) {
+  const [display, setDisplay] = useState('')
+  const [hintIdx, setHintIdx] = useState(0)
+  const [charIdx, setCharIdx] = useState(0)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    const target = hints[hintIdx]
+    let timeout: ReturnType<typeof setTimeout>
+
+    if (!deleting && charIdx < target.length) {
+      timeout = setTimeout(() => setCharIdx(i => i + 1), 55)
+    } else if (!deleting && charIdx === target.length) {
+      timeout = setTimeout(() => setDeleting(true), 1800)
+    } else if (deleting && charIdx > 0) {
+      timeout = setTimeout(() => setCharIdx(i => i - 1), 28)
+    } else {
+      timeout = setTimeout(() => {
+        setDeleting(false)
+        setHintIdx(i => (i + 1) % hints.length)
+      }, 300)
+    }
+
+    setDisplay(target.slice(0, charIdx))
+    return () => clearTimeout(timeout)
+  }, [charIdx, deleting, hintIdx, hints])
+
+  return display
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function UserBubble({ text }: { text: string }) {
@@ -24,7 +73,7 @@ function UserBubble({ text }: { text: string }) {
 }
 
 function AgentBubble({ text, streaming, side }: { text: string; streaming: boolean; side: 'left' | 'right' }) {
-  const avatar = side === 'left' ? '🏢' : '🤖'
+  const avatar = side === 'left' ? '🏛️' : '⚡'
   return (
     <div className="row row-agent">
       <div className={`row-avatar row-avatar-${side}`}>{avatar}</div>
@@ -174,7 +223,7 @@ function LinkReceipt({ msg }: { msg: Extract<Msg, { kind: 'link-receipt' }> }) {
           <a className="receipt-link-url" href={msg.link} target="_blank" rel="noreferrer">{msg.link}</a>
         </div>
       )}
-      <div className="receipt-monitor">● Monitoring for incoming transaction</div>
+      <div className="receipt-monitor">⬤ Monitoring for incoming transaction</div>
     </div>
   )
 }
@@ -213,7 +262,7 @@ function BridgeReceipt({ msg }: { msg: Extract<Msg, { kind: 'bridge-receipt' }> 
       <RR k="Bridge fee" v={`${msg.relayFee} USDC`} />
       <RR k="Receives"   v={`${msg.businessReceives} USDC on ${msg.settlementChain}`} />
       {msg.expires && <RR k="Expires" v={msg.expires} />}
-      <div className="receipt-monitor">● Monitoring Solana deposit</div>
+      <div className="receipt-monitor">⬤ Monitoring Solana deposit</div>
     </div>
   )
 }
@@ -289,12 +338,13 @@ function StatusStrip({ status }: { status: ChatStatus }) {
     <div className="status-strip">
       <div className={`spip spip-${status.state}`} />
       <span>{status.text}</span>
+      {status.state === 'idle' && <span className="strip-cursor">▋</span>}
     </div>
   )
 }
 
 function ThinkingDots({ side }: { side: 'left' | 'right' }) {
-  const avatar = side === 'left' ? '🏢' : '🤖'
+  const avatar = side === 'left' ? '🏛️' : '⚡'
   return (
     <div className="thinking-row">
       <div className={`row-avatar row-avatar-${side}`}>{avatar}</div>
@@ -307,26 +357,39 @@ function ThinkingDots({ side }: { side: 'left' | 'right' }) {
 }
 
 function EmptyState({ side }: { side: 'left' | 'right' }) {
+  const hints = side === 'left' ? LEFT_HINTS : RIGHT_HINTS
+  const typed = useTypewriter(hints)
+
   if (side === 'left') {
     return (
       <div className="empty">
-        <div className="empty-icon">🏢</div>
+        <div className="empty-icon">🏛️</div>
         <div className="empty-title">Business owner panel</div>
         <p className="empty-body">
-          Type natural language commands to configure your business.<br />
-          <span className="empty-muted">Routes through the <strong>business-owner</strong> OpenClaw agent.</span>
+          Configure your payment rails &amp; boundaries.<br />
+          <span className="empty-muted">Agent: <strong>business-owner</strong></span>
         </p>
+        <div className="empty-typewriter">
+          <span className="empty-prompt">$ </span>
+          <span>{typed}</span>
+          <span className="empty-caret">▋</span>
+        </div>
       </div>
     )
   }
   return (
     <div className="empty">
-      <div className="empty-icon">🤖</div>
+      <div className="empty-icon">⚡</div>
       <div className="empty-title">Agent terminal</div>
       <p className="empty-body">
-        Type payment requests — watch the AI route &amp; execute in real-time.<br />
-        <span className="empty-muted">Routes through the <strong>business-product</strong> OpenClaw agent.</span>
+        Request payments — watch AI route &amp; execute in real-time.<br />
+        <span className="empty-muted">Agent: <strong>business-product</strong> → <strong>orchestrator</strong></span>
       </p>
+      <div className="empty-typewriter">
+        <span className="empty-prompt">$ </span>
+        <span>{typed}</span>
+        <span className="empty-caret">▋</span>
+      </div>
     </div>
   )
 }
@@ -437,7 +500,7 @@ export function ChatPanel({ side, title, subtitle, agentBadge, avatar, endpoint,
           onClick={handleSend}
           disabled={busy || !input.trim()}
         >
-          Send
+          ↑
         </button>
       </div>
     </div>
