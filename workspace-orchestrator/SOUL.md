@@ -21,6 +21,8 @@ cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "SERVIC
 ```
 The script posts the result to the UI automatically. No curl needed.
 
+If the script exits with error (e.g. insufficient gateway balance, x402 amount mismatch) → fall back to `create_payment_link` on polygon: read wallet/business info from BOUNDARY.md and run generate-payment-link.ts + monitor-transaction.ts as described below.
+
 ### If `rail = agent_card`:
 Check `payment_rails.agent_card.enabled` in BOUNDARY.md. If false → stop.
 If true → run (replace PAYMENT_ID and AMOUNT with values from the message):
