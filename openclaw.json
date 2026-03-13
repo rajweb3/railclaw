@@ -40,7 +40,7 @@
         default: true,
         name: "Railclaw Product",
         workspace: "~/.openclaw/workspace-product",
-        subagents: { allowAgents: [] }
+        subagents: { allowAgents: ["orchestrator"] }
       },
       {
         id: "orchestrator",

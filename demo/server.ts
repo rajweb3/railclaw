@@ -146,6 +146,32 @@ async function setupX402() {
   }
 }
 
+// ─── Async payment result store ───────────────────────────────────────────────
+//
+// Orchestrator POSTs result here after executing a payment script.
+// UI polls /api/payment-status/:id until result arrives.
+
+const paymentResults = new Map<string, Record<string, unknown>>();
+
+app.post('/api/payment-callback', (req: Request, res: Response) => {
+  const { paymentId, result } = req.body as { paymentId?: string; result?: Record<string, unknown> };
+  if (!paymentId || !result) { res.status(400).json({ error: 'paymentId and result required' }); return; }
+  paymentResults.set(paymentId, result);
+  setTimeout(() => paymentResults.delete(paymentId), 10 * 60 * 1000); // cleanup after 10m
+  console.log(`  [callback] payment result stored: ${paymentId} → ${result.status}`);
+  res.json({ ok: true });
+});
+
+app.get('/api/payment-status/:id', (req: Request, res: Response) => {
+  const result = paymentResults.get(req.params.id);
+  if (result) {
+    paymentResults.delete(req.params.id); // consume once
+    res.json({ status: 'complete', result });
+  } else {
+    res.json({ status: 'pending' });
+  }
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({

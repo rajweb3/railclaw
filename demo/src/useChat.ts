@@ -231,14 +231,80 @@ export function useChat(endpoint: string) {
 
   // Track in-flight streaming IDs via ref (stable across renders)
   const streamRef = useRef({
-    agentId:    null as string | null,
-    agentText:  '',                      // accumulated full text for receipt parsing
-    thinkingId: null as string | null,
-    spawnId:    null as string | null,
-    scriptId:   null as string | null,
-    inThinking: false,
-    toolShown:  new Set<string>(),
+    agentId:      null as string | null,
+    agentText:    '',                      // accumulated full text for receipt parsing
+    thinkingId:   null as string | null,
+    spawnId:      null as string | null,
+    scriptId:     null as string | null,
+    inThinking:   false,
+    toolShown:    new Set<string>(),
+    pollingTimer: null as ReturnType<typeof setInterval> | null,
   })
+
+  // ── Receipt from JSON (used by both polling and output-array parsing) ─────────
+  function receiptFromJSON(p: Record<string, unknown>): Msg | null {
+    const scriptOut = (p.script_output ?? p) as Record<string, unknown>
+    const rail   = String(p.rail ?? scriptOut.rail ?? '')
+    const amount = String(p.amount ?? scriptOut.amount ?? '')
+    if (rail === 'nanopayment' || scriptOut.service_url) {
+      return { id: uid(), kind: 'nano-receipt',
+        chain:         String(scriptOut.chain ?? p.chain ?? 'arcTestnet'),
+        serviceUrl:    String(scriptOut.service_url ?? 'http://localhost:3100/api/service/premium'),
+        amount:        String(scriptOut.amount ?? amount ?? '0.01'),
+        mode:          String(scriptOut.mode ?? 'live'),
+        balanceBefore: scriptOut.balanceBefore ? String(scriptOut.balanceBefore) : undefined,
+        balanceAfter:  scriptOut.balanceAfter  ? String(scriptOut.balanceAfter)  : undefined,
+      }
+    }
+    if (rail === 'agent_card' || scriptOut.maskedPan) {
+      return { id: uid(), kind: 'card-receipt',
+        maskedPan:    String(scriptOut.maskedPan ?? '•••• •••• •••• ••••'),
+        expiry:       String(scriptOut.expiry ?? 'N/A'),
+        amount:       String(scriptOut.amount ?? amount),
+        balance:      String(scriptOut.balance ?? 'N/A'),
+        mode:         String(scriptOut.mode ?? 'sandbox'),
+        chargeStatus: scriptOut.chargeStatus ? String(scriptOut.chargeStatus) : undefined,
+        cardId:       scriptOut.cardId ? String(scriptOut.cardId) : undefined,
+        description:  scriptOut.description ? String(scriptOut.description) : undefined,
+        fundedAmount: scriptOut.fundedAmount ? String(scriptOut.fundedAmount) : undefined,
+        isNewCard:    Boolean(scriptOut.isNewCard),
+      }
+    }
+    if (p.status === 'rejected') {
+      return { id: uid(), kind: 'rejected',
+        violation: String(p.violation ?? ''),
+        policy:    String(p.policy ?? ''),
+        received:  String(p.received ?? ''),
+      }
+    }
+    return null
+  }
+
+  // ── Poll for async payment result ─────────────────────────────────────────────
+  function startPolling(paymentId: string, queueStepId: string) {
+    const ref = streamRef.current
+    if (ref.pollingTimer) clearInterval(ref.pollingTimer)
+    let attempts = 0
+    ref.pollingTimer = setInterval(async () => {
+      attempts++
+      try {
+        const res  = await fetch(`/api/payment-status/${paymentId}`)
+        const data = await res.json() as { status: string; result?: Record<string, unknown> }
+        if (data.status === 'complete' && data.result) {
+          clearInterval(ref.pollingTimer!); ref.pollingTimer = null
+          dispatch({ type: 'SETTLE_STEP', id: queueStepId, stepKind: 'done', body: 'orchestrator complete' })
+          const receipt = receiptFromJSON(data.result)
+          if (receipt) dispatch({ type: 'ADD_MSG', msg: receipt })
+          dispatch({ type: 'SET_STATUS', status: { state: 'done', text: '✓ done' } })
+          setTimeout(() => dispatch({ type: 'SET_STATUS', status: { state: 'idle', text: 'idle' } }), 1800)
+        }
+      } catch { /* network blip — keep polling */ }
+      if (attempts >= 30) { // 60s timeout
+        clearInterval(ref.pollingTimer!); ref.pollingTimer = null
+        dispatch({ type: 'SETTLE_STEP', id: queueStepId, stepKind: 'error', body: 'timeout' })
+      }
+    }, 2000)
+  }
 
   const setStatus = useCallback((s: StatusState, text: string) => {
     dispatch({ type: 'SET_STATUS', status: { state: s, text } })
@@ -358,6 +424,17 @@ export function useChat(endpoint: string) {
               ref.agentText += chunk
             }
 
+            // Detect PAYMENT QUEUED pattern → start polling
+            const payIdMatch = (ref.agentText).match(/ID:\s*(pay_\d+)/)
+            if (payIdMatch && !ref.toolShown.has('queued')) {
+              ref.toolShown.add('queued')
+              const paymentId = payIdMatch[1]
+              const queueId = uid()
+              dispatch({ type: 'ADD_MSG', msg: { id: queueId, kind: 'step', stepKind: 'spawn', icon: '🔀', label: `Payment queued: ${paymentId}`, body: 'Orchestrator processing — polling for result...', active: true } })
+              setStatus('working', '⏳ orchestrator executing...')
+              startPolling(paymentId, queueId)
+            }
+
             // Heuristic: detect spawn/script from plain text stream
             const toolType = detectTool(chunk)
             if (toolType && !ref.toolShown.has(toolType) && !ref.inThinking) {
@@ -411,40 +488,12 @@ export function useChat(endpoint: string) {
                 if (m) {
                   try {
                     const p = JSON.parse(m[0]) as Record<string, unknown>
-                    const scriptOut = (p.script_output ?? p) as Record<string, unknown>
-                    const rail = String(p.rail ?? scriptOut.rail ?? '')
-                    const amount = String(p.amount ?? scriptOut.amount ?? '')
-
-                    if (rail === 'nanopayment' || scriptOut.service_url) {
-                      dispatch({ type: 'ADD_MSG', msg: {
-                        id: uid(), kind: 'nano-receipt',
-                        chain:         String(scriptOut.chain ?? p.chain ?? 'arcTestnet'),
-                        serviceUrl:    String(scriptOut.service_url ?? 'demo service'),
-                        amount:        String(scriptOut.amount ?? amount ?? '0.01'),
-                        mode:          String(scriptOut.mode ?? 'simulation'),
-                        balanceBefore: scriptOut.balanceBefore ? String(scriptOut.balanceBefore) : undefined,
-                        balanceAfter:  scriptOut.balanceAfter  ? String(scriptOut.balanceAfter)  : undefined,
-                      }})
-                    } else if (rail === 'agent_card' || scriptOut.maskedPan) {
-                      dispatch({ type: 'ADD_MSG', msg: {
-                        id: uid(), kind: 'card-receipt',
-                        maskedPan:    String(scriptOut.maskedPan ?? '•••• •••• •••• ••••'),
-                        expiry:       String(scriptOut.expiry ?? 'N/A'),
-                        amount:       String(scriptOut.amount ?? amount),
-                        balance:      String(scriptOut.balance ?? 'N/A'),
-                        mode:         String(scriptOut.mode ?? 'sandbox'),
-                        chargeStatus: scriptOut.chargeStatus ? String(scriptOut.chargeStatus) : undefined,
-                        cardId:       scriptOut.cardId ? String(scriptOut.cardId) : undefined,
-                        description:  scriptOut.description ? String(scriptOut.description) : undefined,
-                        fundedAmount: scriptOut.fundedAmount ? String(scriptOut.fundedAmount) : undefined,
-                        isNewCard:    Boolean(scriptOut.isNewCard),
-                      }})
-                    } else if (p.status === 'executed') {
+                    const receipt = receiptFromJSON(p)
+                    if (receipt) { dispatch({ type: 'ADD_MSG', msg: receipt }); break }
+                    if (p.status === 'executed') {
                       dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Payment link created', body: String(p.payment_id ?? ''), active: false } })
                     } else if (p.status === 'bridge_payment') {
                       dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Bridge payment initiated', body: 'Monitoring Solana deposit...', active: false } })
-                    } else if (p.status === 'rejected') {
-                      dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'rejected', violation: String(p.violation ?? ''), policy: String(p.policy ?? ''), received: String(p.received ?? '') } })
                     }
                   } catch { /* text response */ }
                 }
