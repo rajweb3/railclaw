@@ -33,6 +33,22 @@ export default function App() {
           <span className="logo">Railclaw</span>
         </div>
         <span className="tag">Cloudflare for Payments</span>
+        <div className="agent-nodes">
+          <div className="agent-node agent-node-blue">
+            <span className="agent-node-dot" />
+            <span>business-owner</span>
+          </div>
+          <div className="agent-node-arrow">→</div>
+          <div className="agent-node agent-node-green">
+            <span className="agent-node-dot" />
+            <span>business-product</span>
+          </div>
+          <div className="agent-node-arrow">→</div>
+          <div className="agent-node agent-node-purple">
+            <span className="agent-node-dot" />
+            <span>orchestrator</span>
+          </div>
+        </div>
         <div className="header-divider" />
         <div className="health">
           <div className={dotClass} />
