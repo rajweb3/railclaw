@@ -96,7 +96,7 @@
       },
 
       streamMode: "partial",
-      replyToMode: "all"
+      replyToMode: "origin"
     }
   },
 
