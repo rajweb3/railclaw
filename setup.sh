@@ -193,8 +193,6 @@ echo "RAILCLAW_SCRIPTS_DIR=$RAILCLAW_DIR/shared/scripts" >> "$ENV_FILE"
 echo ""
 echo "  Installing demo dependencies (React + Vite + Express)..."
 cd "$RAILCLAW_DIR/demo"
-mkdir -p public
-cp "$RAILCLAW_DIR/docs/logo.jpg" public/logo.jpg
 npm install
 echo "  Building React app..."
 npm run build
