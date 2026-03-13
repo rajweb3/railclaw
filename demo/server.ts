@@ -12,7 +12,7 @@
  * Open: http://<EC2_IP>:3100
  */
 
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
@@ -134,13 +134,8 @@ async function setupX402() {
 
     app.get(
       '/api/service/premium',
-      // Dynamic price from ?amount= query param (default $0.01)
-      (req: Request, res: Response, next: NextFunction) => {
-        const amt = parseFloat(req.query.amount as string || '0.01');
-        const price = `$${amt.toFixed(6).replace(/\.?0+$/, '') || '0.01'}`;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (gateway.require(price) as any)(req, res, next);
-      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      gateway.require('$0.01') as any,
       (req: Request, res: Response) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const payer = (req as any).payment?.payer ?? 'unknown';
@@ -149,7 +144,7 @@ async function setupX402() {
         res.json({ service: 'Premium AI Insights', data, payer });
       }
     );
-    console.log(`  /api/service/premium → x402 protected (dynamic amount USDC → ${SELLER_ADDRESS})`);
+    console.log(`  /api/service/premium → x402 protected ($0.01 USDC → ${SELLER_ADDRESS})`);
   } catch (err) {
     console.warn('  Circle Gateway unavailable — open endpoint fallback:', (err as Error).message);
     app.get('/api/service/premium', (req: Request, res: Response) => {
