@@ -69,7 +69,11 @@ try {
     await client.deposit('1');
   }
 
-  const { data, status, transaction, formattedAmount } = await client.pay(url);
+  const payResult = await client.pay(url);
+  // Debug: log all fields returned by Circle Gateway SDK
+  console.error('[nanopayment] payResult fields:', Object.keys(payResult));
+  console.error('[nanopayment] payResult:', JSON.stringify(payResult, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+  const { data, status, transaction, formattedAmount } = payResult;
 
   const updated = await client.getBalances();
   const balanceAfter = updated.gateway.formattedAvailable;
