@@ -134,6 +134,31 @@ function CardReceipt({ msg }: { msg: Extract<Msg, { kind: 'card-receipt' }> }) {
 }
 
 function LinkReceipt({ msg }: { msg: Extract<Msg, { kind: 'link-receipt' }> }) {
+  if (msg.confirmed) {
+    const explorerBase: Record<string, string> = {
+      polygon: 'https://polygonscan.com/tx',
+      arbitrum: 'https://arbiscan.io/tx',
+    }
+    const explorer = explorerBase[msg.chain?.toLowerCase()] ?? 'https://polygonscan.com/tx'
+    return (
+      <div className="receipt receipt-link receipt-confirmed">
+        <div className="receipt-header">✅ Payment Confirmed</div>
+        <hr className="receipt-divider" />
+        <RR k="Payment"  v={msg.paymentId} />
+        {msg.chain  && <RR k="Chain"  v={msg.chain} />}
+        {msg.token  && <RR k="Token"  v={msg.token} />}
+        {msg.amount && <RR k="Amount" v={`${msg.amount} USDC`} />}
+        {msg.txHash && (
+          <div className="rr">
+            <span className="rk">Tx Hash</span>
+            <a className="rv rv-link" href={`${explorer}/${msg.txHash}`} target="_blank" rel="noopener noreferrer" title={msg.txHash}>
+              {msg.txHash.slice(0, 10)}…{msg.txHash.slice(-8)}
+            </a>
+          </div>
+        )}
+      </div>
+    )
+  }
   return (
     <div className="receipt receipt-link">
       <div className="receipt-header">🔗 Payment Link Created</div>
@@ -155,6 +180,29 @@ function LinkReceipt({ msg }: { msg: Extract<Msg, { kind: 'link-receipt' }> }) {
 }
 
 function BridgeReceipt({ msg }: { msg: Extract<Msg, { kind: 'bridge-receipt' }> }) {
+  if (msg.confirmed) {
+    const explorerBase: Record<string, string> = {
+      polygon: 'https://polygonscan.com/tx',
+      arbitrum: 'https://arbiscan.io/tx',
+    }
+    const explorer = explorerBase[msg.settlementChain?.toLowerCase()] ?? 'https://polygonscan.com/tx'
+    return (
+      <div className="receipt receipt-bridge receipt-confirmed">
+        <div className="receipt-header">✅ Bridge Confirmed</div>
+        <hr className="receipt-divider" />
+        <RR k="Payment"    v={msg.paymentId} />
+        <RR k="Settled on" v={msg.settlementChain} />
+        {msg.txHash && (
+          <div className="rr">
+            <span className="rk">Tx Hash</span>
+            <a className="rv rv-link" href={`${explorer}/${msg.txHash}`} target="_blank" rel="noopener noreferrer" title={msg.txHash}>
+              {msg.txHash.slice(0, 10)}…{msg.txHash.slice(-8)}
+            </a>
+          </div>
+        )}
+      </div>
+    )
+  }
   return (
     <div className="receipt receipt-bridge">
       <div className="receipt-header">🌉 Bridge Payment Initiated</div>

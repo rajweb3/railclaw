@@ -30,18 +30,35 @@ cd /home/ec2-user/payclaw/shared/scripts && npx tsx agent-card-payment.ts --amou
 The script posts the result to the UI automatically. No curl needed.
 
 ### If `action = create_payment_link`:
-Read `wallet`, `business.name`, `business.id` from BOUNDARY.md. Check `chain` is in `allowed_chains`. Run:
+Check `chain` is in `allowed_chains` in BOUNDARY.md. If not → stop with rejected callback.
+Read `wallet`, `business.name`, `business.id` from BOUNDARY.md.
+
+Step 1 — run (replace PAYMENT_ID, CHAIN, AMOUNT, WALLET, BUSINESS_NAME, BUSINESS_ID with values from the message):
 ```bash
-cd /home/ec2-user/payclaw/shared/scripts && npx tsx generate-payment-link.ts --chain <chain> --token USDC --amount <amount> --wallet <wallet> --business "<business.name>" --business-id "<business.id>"
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx generate-payment-link.ts --chain CHAIN --token USDC --amount AMOUNT --wallet WALLET --business "BUSINESS_NAME" --business-id "BUSINESS_ID" --payment-id "PAYMENT_ID"
 ```
-Then post result: `printf '{"paymentId":"PAYMENT_ID","result":%s}' "$RESULT" | curl -s -X POST http://localhost:3100/api/payment-callback -H "Content-Type: application/json" --data @-`
+The script self-callbacks to the UI. No curl needed.
+
+Step 2 — start background monitor (replace all caps placeholders):
+```bash
+setsid nohup npx tsx /home/ec2-user/payclaw/shared/scripts/monitor-transaction.ts --payment-id "PAYMENT_ID" --callback-id "PAYMENT_ID_c" --chain CHAIN --token USDC --amount AMOUNT --wallet WALLET --confirmations 1 > /dev/null 2>&1 &
+```
+The monitor self-callbacks with PAYMENT_ID_c when confirmed. No other action needed.
 
 ### If `action = bridge_payment`:
-Read wallet, business info, `cross_chain.bridge.settlement_chain` from BOUNDARY.md. Run:
+Read `wallet`, `business.name`, `business.id`, `cross_chain.bridge.settlement_chain` from BOUNDARY.md.
+
+Step 1 — run (replace all caps placeholders):
 ```bash
-cd /home/ec2-user/payclaw/shared/scripts && npx tsx bridge-payment.ts --source-chain solana --settlement-chain <settlement_chain> --token USDC --amount <amount> --wallet <wallet> --business "<business.name>" --business-id "<business.id>"
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx bridge-payment.ts --source-chain solana --settlement-chain SETTLEMENT_CHAIN --token USDC --amount AMOUNT --wallet WALLET --business "BUSINESS_NAME" --business-id "BUSINESS_ID" --payment-id "PAYMENT_ID"
 ```
-Then post result the same way.
+The script self-callbacks to the UI. No curl needed.
+
+Step 2 — start background monitor:
+```bash
+setsid nohup npx tsx /home/ec2-user/payclaw/shared/scripts/monitor-solana-deposit.ts --payment-id "PAYMENT_ID" --callback-id "PAYMENT_ID_c" --settlement-chain SETTLEMENT_CHAIN > /dev/null 2>&1 &
+```
+The monitor self-callbacks with PAYMENT_ID_c when confirmed. No other action needed.
 
 ## IMPORTANT
 

@@ -254,6 +254,7 @@ export function useChat(endpoint: string) {
         mode:          String(scriptOut.mode ?? 'live'),
         balanceBefore: scriptOut.balanceBefore ? String(scriptOut.balanceBefore) : undefined,
         balanceAfter:  scriptOut.balanceAfter  ? String(scriptOut.balanceAfter)  : undefined,
+        txHash:        scriptOut.transaction   ? String(scriptOut.transaction)   : undefined,
       }
     }
     if (rail === 'agent_card' || scriptOut.maskedPan) {
@@ -270,6 +271,55 @@ export function useChat(endpoint: string) {
         isNewCard:    Boolean(scriptOut.isNewCard),
       }
     }
+    if (rail === 'payment_link' || (scriptOut.link && !scriptOut.service_url)) {
+      return { id: uid(), kind: 'link-receipt',
+        paymentId: String(scriptOut.payment_id ?? p.payment_id ?? ''),
+        link:      String(scriptOut.link ?? ''),
+        chain:     String(scriptOut.chain ?? ''),
+        token:     String(scriptOut.token ?? 'USDC'),
+        amount:    String(scriptOut.amount ?? ''),
+        recipient: String(scriptOut.wallet ?? ''),
+        expires:   scriptOut.expires_at ? String(scriptOut.expires_at) : undefined,
+        confirmed: false,
+      }
+    }
+    if (rail === 'payment_link_confirmed') {
+      return { id: uid(), kind: 'link-receipt',
+        paymentId: String(p.payment_id ?? ''),
+        link:      '',
+        chain:     String(p.chain ?? ''),
+        token:     String(p.token ?? 'USDC'),
+        amount:    String(p.amount ?? ''),
+        recipient: '',
+        txHash:    p.tx_hash ? String(p.tx_hash) : undefined,
+        confirmed: true,
+      }
+    }
+    if (rail === 'bridge' || scriptOut.bridge_instructions) {
+      const bi = (scriptOut.bridge_instructions ?? scriptOut) as Record<string, unknown>
+      return { id: uid(), kind: 'bridge-receipt',
+        paymentId:        String(scriptOut.payment_id ?? p.payment_id ?? ''),
+        depositAddress:   String(bi.deposit_address ?? ''),
+        amountToSend:     String(bi.amount_to_send ?? ''),
+        relayFee:         String(bi.relay_fee ?? ''),
+        businessReceives: String(bi.business_receives ?? ''),
+        settlementChain:  String(bi.settlement_chain ?? ''),
+        expires:          scriptOut.expires_at ? String(scriptOut.expires_at) : undefined,
+        confirmed: false,
+      }
+    }
+    if (rail === 'bridge_confirmed') {
+      return { id: uid(), kind: 'bridge-receipt',
+        paymentId:        String(p.payment_id ?? ''),
+        depositAddress:   '',
+        amountToSend:     '',
+        relayFee:         '',
+        businessReceives: '',
+        settlementChain:  String(p.settlement_chain ?? ''),
+        txHash:           p.tx_hash ? String(p.tx_hash) : undefined,
+        confirmed:        true,
+      }
+    }
     if (p.status === 'rejected') {
       return { id: uid(), kind: 'rejected',
         violation: String(p.violation ?? ''),
@@ -281,6 +331,24 @@ export function useChat(endpoint: string) {
   }
 
   // ── Poll for async payment result ─────────────────────────────────────────────
+  function startConfirmationPoll(confirmId: string) {
+    let attempts = 0
+    const maxAttempts = 450 // 900s / 15 minutes — enough for bridge
+    const timer = setInterval(async () => {
+      attempts++
+      try {
+        const res  = await fetch(`/api/payment-status/${confirmId}`)
+        const data = await res.json() as { status: string; result?: Record<string, unknown> }
+        if (data.status === 'complete' && data.result) {
+          clearInterval(timer)
+          const confirmed = receiptFromJSON(data.result)
+          if (confirmed) dispatch({ type: 'ADD_MSG', msg: confirmed })
+        }
+      } catch { /* keep polling */ }
+      if (attempts >= maxAttempts) clearInterval(timer)
+    }, 2000)
+  }
+
   function startPolling(paymentId: string, queueStepId: string) {
     const ref = streamRef.current
     if (ref.pollingTimer) clearInterval(ref.pollingTimer)
@@ -294,7 +362,12 @@ export function useChat(endpoint: string) {
           clearInterval(ref.pollingTimer!); ref.pollingTimer = null
           dispatch({ type: 'SETTLE_STEP', id: queueStepId, stepKind: 'done', body: 'orchestrator complete' })
           const receipt = receiptFromJSON(data.result)
-          if (receipt) dispatch({ type: 'ADD_MSG', msg: receipt })
+          if (receipt) {
+            dispatch({ type: 'ADD_MSG', msg: receipt })
+            if ((receipt.kind === 'link-receipt' || receipt.kind === 'bridge-receipt') && !receipt.confirmed) {
+              startConfirmationPoll(paymentId + '_c')
+            }
+          }
           dispatch({ type: 'SET_STATUS', status: { state: 'done', text: '✓ done' } })
           setTimeout(() => dispatch({ type: 'SET_STATUS', status: { state: 'idle', text: 'idle' } }), 1800)
         }

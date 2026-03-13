@@ -545,6 +545,11 @@ header {
 .receipt-bridge .receipt-header { color: var(--orange); }
 .receipt-bridge .receipt-divider { border-color: var(--orange); }
 .receipt-bridge .receipt-monitor { color: var(--orange); }
+.receipt-confirmed { opacity: 1; }
+.receipt-link.receipt-confirmed   { border-color: var(--green); }
+.receipt-bridge.receipt-confirmed { border-color: var(--green); background: var(--green-dim); }
+.receipt-link.receipt-confirmed   .receipt-header { color: var(--green); }
+.receipt-bridge.receipt-confirmed .receipt-header { color: var(--green); }
 
 .receipt-rejected { border: 1px solid var(--red-border);  background: var(--red-dim);    }
 .receipt-rejected .receipt-header { color: var(--red); }

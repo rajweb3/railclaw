@@ -18,6 +18,7 @@ import { config, parseArgs, resolveDataPath } from './lib/config.js';
 import { generateId } from './lib/crypto-utils.js';
 
 const args = parseArgs(process.argv);
+const externalPaymentId = args['payment-id'] || '';
 
 const chain = args['chain'];
 const token = args['token'];
@@ -38,7 +39,18 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-const paymentId = generateId('pay');
+async function postCallback(result: object): Promise<void> {
+  if (!externalPaymentId) return;
+  try {
+    await fetch('http://localhost:3100/api/payment-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: externalPaymentId, result }),
+    });
+  } catch { /* best-effort */ }
+}
+
+const paymentId = externalPaymentId || generateId('pay');
 const now = new Date();
 const expiresAt = new Date(now.getTime() + config.payment.defaultExpiryHours * 60 * 60 * 1000);
 const tokenAddress = config.tokens[chain.toLowerCase()]?.[token.toUpperCase()] || null;
@@ -79,3 +91,14 @@ console.log(
     expires_at: paymentRecord.expires_at,
   })
 );
+await postCallback({
+  rail: 'payment_link',
+  success: true,
+  payment_id: paymentId,
+  link,
+  chain: paymentRecord.chain,
+  token: paymentRecord.token,
+  amount: String(paymentRecord.amount),
+  wallet: paymentRecord.wallet,
+  expires_at: paymentRecord.expires_at,
+});

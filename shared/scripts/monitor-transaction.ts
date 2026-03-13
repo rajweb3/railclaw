@@ -35,10 +35,21 @@ const chatId = process.env.TELEGRAM_OWNER_CHAT_ID || '';
 const requiredConfirmations = parseInt(args['confirmations'] || String(config.monitoring.requiredConfirmations));
 const timeoutSeconds = parseInt(args['timeout'] || String(config.monitoring.timeoutMs / 1000));
 const pollIntervalSeconds = parseInt(args['poll-interval'] || String(config.monitoring.pollIntervalMs / 1000));
+const callbackId = args['callback-id'] || (paymentId + '_c');
 
 if (!paymentId || !chain || !token || !amount || !wallet) {
   console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
   process.exit(1);
+}
+
+async function postCallback(result: object): Promise<void> {
+  try {
+    await fetch('http://localhost:3100/api/payment-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: callbackId, result }),
+    });
+  } catch { /* best-effort */ }
 }
 
 const rpcUrl = config.rpc[chain];
@@ -324,6 +335,16 @@ async function main() {
       confirmations: finalConfirmations,
       confirmed_at: confirmedAt,
     }));
+    await postCallback({
+      rail: 'payment_link_confirmed',
+      payment_id: paymentId,
+      tx_hash: txHash,
+      chain,
+      token,
+      amount: String(amount),
+      confirmations: finalConfirmations,
+      confirmed_at: confirmedAt,
+    });
     process.exit(0);
   }
 

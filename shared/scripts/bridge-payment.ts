@@ -52,6 +52,18 @@ function toHuman(raw: bigint, decimals: number): string {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const externalPaymentId = args['payment-id'] || '';
+
+  async function postCallback(result: object): Promise<void> {
+    if (!externalPaymentId) return;
+    try {
+      await fetch('http://localhost:3100/api/payment-callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: externalPaymentId, result }),
+      });
+    } catch { /* best-effort */ }
+  }
 
   const sourceChain     = args['source-chain'];
   const settlementChain = args['settlement-chain'];
@@ -125,7 +137,7 @@ async function main() {
     config.encryption.walletKey,
   );
 
-  const paymentId = generateId('pay');
+  const paymentId = externalPaymentId || generateId('pay');
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + config.payment.defaultExpiryHours * 60 * 60 * 1000);
 
@@ -188,6 +200,21 @@ async function main() {
     },
     expires_at: expiresAt.toISOString(),
   }));
+  await postCallback({
+    rail: 'bridge',
+    payment_id: paymentId,
+    bridge_instructions: {
+      network: 'solana',
+      deposit_address: tempKeypair.publicKey.toString(),
+      token,
+      amount_to_send: toHuman(rawInputAmount, decimals),
+      relay_fee: relayFee.toFixed(2),
+      business_receives: toHuman(rawOutputAmount, decimals),
+      settlement_chain: settlementChain,
+      settlement_wallet: wallet,
+    },
+    expires_at: expiresAt.toISOString(),
+  });
 }
 
 main().catch((err) => {

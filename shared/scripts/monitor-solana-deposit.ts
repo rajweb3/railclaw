@@ -525,6 +525,17 @@ async function main() {
   const resumeStage3    = args['resume-stage3'] === 'true';
   // How many blocks back to look when resuming Stage 3 (covers fills that happened while monitor was down)
   const stage3Lookback  = parseInt(args['stage3-lookback'] || '2000');
+  const callbackId = args['callback-id'] || (paymentId + '_c');
+
+  async function postCallback(result: object): Promise<void> {
+    try {
+      await fetch('http://localhost:3100/api/payment-callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: callbackId, result }),
+      });
+    } catch { /* best-effort */ }
+  }
 
   if (!paymentId || !settlementChain) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
@@ -664,6 +675,18 @@ async function main() {
       console.error(`[monitor-solana-deposit] Failed to send Telegram notification: ${String(err)}`);
     }
   }
+
+  await postCallback({
+    rail: 'bridge_confirmed',
+    payment_id: paymentId,
+    tx_hash: fillResult.txHash,
+    confirmations: fillResult.confirmations,
+    confirmed_at: confirmedAt,
+    source_chain: record.source_chain,
+    settlement_chain: record.settlement_chain,
+    token: record.token,
+    amount: String(record.amount),
+  });
 
   console.log(JSON.stringify({
     success:      true,
