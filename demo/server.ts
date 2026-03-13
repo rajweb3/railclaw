@@ -173,6 +173,7 @@ app.post('/api/payment-callback', (req: Request, res: Response) => {
 
 app.get('/api/payment-status/:id', (req: Request, res: Response) => {
   const result = paymentResults.get(req.params.id);
+  console.log(`  [poll] ${req.params.id} → ${result ? 'complete' : 'pending'} (map size: ${paymentResults.size})`);
   if (result) {
     paymentResults.delete(req.params.id); // consume once
     res.json({ status: 'complete', result });
