@@ -36,9 +36,7 @@
   agents: {
     defaults: {
       model: {
-        // Orchestrator uses Claude for reliable tool use and instruction following
-        // Owner/Product use free Llama (lighter tasks)
-        primary: "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+        primary: "anthropic/claude-haiku-4-5-20251001"
       }
     },
     list: [
