@@ -50,11 +50,14 @@ Read `wallet`, `business.name`, `business.id`, `cross_chain.bridge.settlement_ch
 cd /home/ec2-user/payclaw/shared/scripts && npx tsx bridge-payment.ts --source-chain solana --settlement-chain <settlement_chain> --token USDC --amount <amount> --wallet <wallet> --business "<business.name>" --business-id "<business.id>"
 ```
 
-## STEP 3 — Deliver Result (MANDATORY)
+## STEP 3 — Deliver Result (YOU MUST DO THIS — DO NOT SKIP)
 
-Capture the script's JSON output. Then run:
+After the script runs, you MUST run this curl. Do not write a summary. Do not describe what happened. Just run the curl.
+
+Take the JSON output from the script and run this bash command (replace PAYMENT_ID and paste the actual JSON as RESULT):
+
 ```bash
-RESULT='<script output json>' && printf '{"paymentId":"<paymentId>","result":%s}' "$RESULT" | curl -s -X POST http://localhost:3100/api/payment-callback -H "Content-Type: application/json" --data @-
+printf '{"paymentId":"PAYMENT_ID","result":RESULT}' | curl -s -X POST http://localhost:3100/api/payment-callback -H "Content-Type: application/json" --data @-
 ```
 
-This curl is mandatory. Without it the UI never receives the result.
+If you skip this curl, the UI never receives the result and the payment appears to have failed. Running this curl is the last and most important step.
