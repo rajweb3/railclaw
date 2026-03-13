@@ -72,7 +72,10 @@ When `/boundary set-rail agent-card off` is called:
 1. Increment `version`
 2. Update `updated_at`
 3. Write memory trace to `memory/YYYY-MM-DD.md`
-4. Copy the full contents of BOUNDARY.md to `$RAILCLAW_DATA_DIR/boundary-backup.md` (overwrite)
+4. Run bash to create a timestamped backup:
+```bash
+mkdir -p /home/ec2-user/payclaw/shared/data/boundary-backups && cp /home/ec2-user/payclaw/shared/BOUNDARY.md "/home/ec2-user/payclaw/shared/data/boundary-backups/BOUNDARY-$(date +%Y%m%d-%H%M%S).md"
+```
 
 Note: The orchestrator reads BOUNDARY.md fresh on every request, so no notification is needed. Changes take immediate effect.
 

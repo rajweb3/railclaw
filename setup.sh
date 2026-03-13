@@ -106,6 +106,14 @@ echo "  OK"
 echo ""
 echo "[5/6] Setting up OpenClaw workspaces..."
 
+# Backup existing openclaw.json before overwriting
+if [[ -f "$OPENCLAW_HOME/openclaw.json" ]]; then
+  BACKUP_DIR="$RAILCLAW_DIR/shared/data/config-backups"
+  mkdir -p "$BACKUP_DIR"
+  cp "$OPENCLAW_HOME/openclaw.json" "$BACKUP_DIR/openclaw-$(date +%Y%m%d-%H%M%S).json"
+  echo "  Backed up existing openclaw.json → $BACKUP_DIR"
+fi
+
 # Copy the main config and substitute env vars with actual values
 # OpenClaw does NOT resolve ${VAR} from systemd env — tokens must be hardcoded
 sed \
