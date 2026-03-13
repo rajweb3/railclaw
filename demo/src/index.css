@@ -505,6 +505,8 @@ header {
 }
 .rk { color: var(--muted2); min-width: 90px; flex-shrink: 0; }
 .rv { color: var(--text); word-break: break-all; }
+.rv-link { color: var(--blue); text-decoration: underline; }
+.rv-link:hover { opacity: 0.8; }
 
 .receipt-link-url {
   color: var(--blue);

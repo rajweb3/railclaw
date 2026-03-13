@@ -95,6 +95,20 @@ function NanoReceipt({ msg }: { msg: Extract<Msg, { kind: 'nano-receipt' }> }) {
       <RR k="Mode"    v={msg.mode} />
       {msg.balanceBefore && <RR k="Balance before" v={msg.balanceBefore} />}
       {msg.balanceAfter  && <RR k="Balance after"  v={msg.balanceAfter} />}
+      {msg.txHash && (
+        <div className="rr">
+          <span className="rk">Tx Hash</span>
+          <a
+            className="rv rv-link"
+            href={`https://testnet.arbiscan.io/tx/${msg.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={msg.txHash}
+          >
+            {msg.txHash.slice(0, 10)}…{msg.txHash.slice(-8)}
+          </a>
+        </div>
+      )}
     </div>
   )
 }
