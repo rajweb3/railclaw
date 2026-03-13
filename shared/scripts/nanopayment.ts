@@ -15,13 +15,8 @@ import { GatewayClient } from '@circle-fin/x402-batching/client';
 import { parseArgs } from './lib/config.js';
 
 const args = parseArgs(process.argv);
-const url   = args['url'];
+const url   = args['url'] || 'http://localhost:3100/api/service/premium';
 const chain = (args['chain'] || 'arcTestnet') as 'arcTestnet' | 'base' | 'baseSepolia' | 'arbitrumSepolia';
-
-if (!url) {
-  console.log(JSON.stringify({ status: 'error', error: 'Missing --url argument' }));
-  process.exit(1);
-}
 
 const privateKey = process.env.CIRCLE_BUYER_PRIVATE_KEY as `0x${string}` | undefined;
 
