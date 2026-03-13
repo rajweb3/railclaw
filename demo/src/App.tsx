@@ -28,8 +28,12 @@ export default function App() {
   return (
     <>
       <header>
-        <span className="logo">⚡ Railclaw</span>
+        <div className="logo-wrap">
+          <img src="/logo.jpg" alt="Railclaw" className="logo-img" />
+          <span className="logo">Railclaw</span>
+        </div>
         <span className="tag">Dynamic Payment Rails</span>
+        <div className="header-divider" />
         <div className="health">
           <div className={dotClass} />
           <span>{dotText}</span>
@@ -53,7 +57,7 @@ export default function App() {
           agentBadge="business-product"
           avatar="🤖"
           endpoint="/api/chat/product"
-          placeholder="I want to receive 5 USDC on Polygon..."
+          placeholder="pay 0.01 USDC · pay $5 · pay 0.1 USDC on polygon · pay 0.1 USDC from solana"
         />
       </div>
     </>

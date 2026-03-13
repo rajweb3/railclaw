@@ -67,17 +67,37 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  backdrop-filter: blur(8px);
+}
+
+.logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border2);
+  image-rendering: pixelated;
 }
 
 .logo {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--blue);
-  letter-spacing: -0.3px;
+  color: var(--text);
+  letter-spacing: -0.4px;
+}
+
+.header-divider {
+  flex: 1;
 }
 
 .tag {
