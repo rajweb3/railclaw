@@ -7,6 +7,7 @@
   models: {
     providers: {
       anthropic: {
+        baseUrl: "https://api.anthropic.com",
         apiKey: "${ANTHROPIC_API_KEY}",
         models: [
           {
