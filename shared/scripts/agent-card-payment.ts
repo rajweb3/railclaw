@@ -75,14 +75,14 @@ async function getOrCreateCardholder(): Promise<Cardholder> {
 
 // ── Get or create card ────────────────────────────────────────────────────────
 
-async function getOrCreateCard(cardholderId: string): Promise<Card> {
+async function getOrCreateCard(cardholderId: string): Promise<{ card: Card; isNew: boolean; fundedAmount: string }> {
   const { data } = await api<{ cards?: Card[] } | Card[]>('GET', '/api/v1/cards');
   const list: Card[] = Array.isArray(data)
     ? data
     : ((data as { cards?: Card[] }).cards ?? []);
 
   const usable = list.find(c => c.status === 'OPEN' && c.balanceCents >= amountCents);
-  if (usable) return usable;
+  if (usable) return { card: usable, isNew: false, fundedAmount: `$${(usable.balanceCents / 100).toFixed(2)}` };
 
   // Fund card: 10x amount, minimum $10, maximum $500
   const fundCents = Math.min(Math.max(amountCents * 10, 1000), 50000);
@@ -102,14 +102,14 @@ async function getOrCreateCard(cardholderId: string): Promise<Card> {
   if (status !== 200 && status !== 201) {
     throw new Error(`Card creation failed: HTTP ${status} — ${JSON.stringify(newCard)}`);
   }
-  return newCard;
+  return { card: newCard, isNew: true, fundedAmount: `$${(fundCents / 100).toFixed(2)}` };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 try {
   const cardholder = await getOrCreateCardholder();
-  const card       = await getOrCreateCard(cardholder.id);
+  const { card, isNew, fundedAmount } = await getOrCreateCard(cardholder.id);
 
   // Get card details (PAN + expiry)
   const { data: details } = await api<CardDetails>('GET', `/api/v1/cards/${card.id}/details`);
@@ -130,6 +130,8 @@ try {
     expiry,
     amount:       amount.toFixed(2),
     balance,
+    fundedAmount,
+    isNewCard:    isNew,
     description,
     cardId:       card.id,
     chargeStatus: 'approved',

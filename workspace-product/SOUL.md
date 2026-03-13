@@ -101,10 +101,15 @@ Rail:    AgentCard Visa (fiat)
 Card:    <maskedPan>
 Expiry:  <expiry>
 Amount:  $<amount> USD
-Balance: <balance> remaining
+Card limit: <fundedAmount>
+Remaining: <balance>
 Status:  <chargeStatus>
+Mode:    <mode>
+Note:    <description>
+Card ID: <cardId>
 ──────────────────────────────
 ```
+(If isNewCard is true, also add a line: `Card:    Newly provisioned ✦`)
 
 ### Payment link receipt — when JSON has `"status":"executed"`:
 

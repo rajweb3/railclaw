@@ -12,7 +12,8 @@ export type Msg =
       balanceBefore?: string; balanceAfter?: string }
   | { id: string; kind: 'card-receipt';
       maskedPan: string; expiry: string; amount: string; balance: string;
-      mode: string; chargeStatus?: string; cardId?: string }
+      mode: string; chargeStatus?: string; cardId?: string;
+      description?: string; fundedAmount?: string; isNewCard?: boolean }
   | { id: string; kind: 'link-receipt';
       paymentId: string; link: string; chain: string; token: string;
       amount: string; recipient: string; expires?: string }

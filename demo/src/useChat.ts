@@ -117,9 +117,13 @@ function parsePaymentResult(text: string, id: string): Msg | null {
       maskedPan:    g(text, /Card:\s*(.+)/),
       expiry:       g(text, /Expiry:\s*(.+)/),
       amount:       g(text, /Amount:\s*\$?([0-9.]+)/),
-      balance:      g(text, /Balance:\s*(.+)/),
-      mode:         g(text, /Mode:\s*(live|simulation)/i) || 'live',
+      balance:      g(text, /(?:Remaining|Balance):\s*(.+)/),
+      mode:         g(text, /Mode:\s*(live|sandbox|simulation)/i) || 'sandbox',
       chargeStatus: g(text, /Status:\s*(.+)/) || undefined,
+      cardId:       g(text, /Card ID:\s*(.+)/) || undefined,
+      description:  g(text, /Note:\s*(.+)/) || undefined,
+      fundedAmount: g(text, /Card limit:\s*(.+)/) || undefined,
+      isNewCard:    text.includes('Newly provisioned'),
     }
   }
   if (text.includes('EXECUTED') && text.includes('Payment:')) {
@@ -425,8 +429,12 @@ export function useChat(endpoint: string) {
                         expiry:       String(scriptOut.expiry ?? 'N/A'),
                         amount:       String(scriptOut.amount ?? amount),
                         balance:      String(scriptOut.balance ?? 'N/A'),
-                        mode:         String(scriptOut.mode ?? 'live'),
+                        mode:         String(scriptOut.mode ?? 'sandbox'),
                         chargeStatus: scriptOut.chargeStatus ? String(scriptOut.chargeStatus) : undefined,
+                        cardId:       scriptOut.cardId ? String(scriptOut.cardId) : undefined,
+                        description:  scriptOut.description ? String(scriptOut.description) : undefined,
+                        fundedAmount: scriptOut.fundedAmount ? String(scriptOut.fundedAmount) : undefined,
+                        isNewCard:    Boolean(scriptOut.isNewCard),
                       }})
                     } else if (p.status === 'executed') {
                       dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Payment link created', body: String(p.payment_id ?? ''), active: false } })

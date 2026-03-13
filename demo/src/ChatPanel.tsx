@@ -104,13 +104,17 @@ function CardReceipt({ msg }: { msg: Extract<Msg, { kind: 'card-receipt' }> }) {
     <div className="receipt receipt-card">
       <div className="receipt-header">💳 Card Payment Complete</div>
       <hr className="receipt-divider" />
-      <RR k="Rail"    v="AgentCard Visa (fiat)" />
-      <RR k="Card"    v={msg.maskedPan} />
-      <RR k="Expiry"  v={msg.expiry} />
-      <RR k="Amount"  v={`$${msg.amount} USD`} />
-      <RR k="Balance" v={msg.balance} />
-      <RR k="Status"  v={msg.chargeStatus ?? 'approved'} />
-      <RR k="Mode"    v={msg.mode} />
+      <RR k="Rail"        v="AgentCard Visa (fiat)" />
+      <RR k="Card"        v={msg.maskedPan} />
+      <RR k="Expiry"      v={msg.expiry} />
+      <RR k="Amount"      v={`$${msg.amount} USD`} />
+      {msg.fundedAmount && <RR k="Card limit"  v={msg.fundedAmount} />}
+      <RR k="Remaining"   v={msg.balance} />
+      <RR k="Status"      v={msg.chargeStatus ?? 'approved'} />
+      <RR k="Mode"        v={msg.mode} />
+      {msg.isNewCard      && <RR k="Card"  v="Newly provisioned ✦" />}
+      {msg.description    && <RR k="Note"  v={msg.description} />}
+      {msg.cardId         && <RR k="Card ID" v={msg.cardId.slice(0, 16) + '…'} />}
     </div>
   )
 }
