@@ -13,6 +13,14 @@ Extract `paymentId` from the incoming message.
 
 ## STEP 2 — Run the Payment
 
+### If `rail = nanopayment`:
+Check `payment_rails.nanopayment.enabled` in BOUNDARY.md. If false → stop.
+If true → run (replace PAYMENT_ID with the paymentId from the message):
+```bash
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "http://localhost:3100/api/service/premium" --chain "arcTestnet" --payment-id "PAYMENT_ID"
+```
+The script posts the result to the UI automatically. No curl needed.
+
 ### If `rail = agent_card`:
 Check `payment_rails.agent_card.enabled` in BOUNDARY.md. If false → stop.
 If true → run (replace PAYMENT_ID and AMOUNT with values from the message):
@@ -54,4 +62,4 @@ The monitor self-callbacks with PAYMENT_ID_c when confirmed. No other action nee
 
 ## IMPORTANT
 
-For `rail = agent_card`: the script handles EVERYTHING including the callback. You just run the bash command. No curl needed separately. No summary needed. Your job is done after running the bash command.
+For `rail = nanopayment` and `rail = agent_card`: the `run-payment.sh` script handles EVERYTHING including the callback. You just run the bash command. No curl needed separately. No summary needed. Your job is done after running the bash command.

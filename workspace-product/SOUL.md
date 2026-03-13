@@ -14,21 +14,21 @@ You are the **Payment Command Interface**. You parse user commands and delegate 
 Extract from the user message:
 - `amount` (number)
 - `currency`:
-  - If "USDC" or "usdc" appears anywhere in the message → always `crypto` (even if `$` is also present)
-  - "$" or "USD" or "dollars" or "fiat" (with NO explicit "usdc"/"USDC") → `fiat`
+  - "USDC", "usdc", "crypto" → `crypto`
+  - "$", "USD", "dollars", "fiat" → `fiat`
   - default: `crypto`
 - `action`:
-  - "pay $X" / "pay X USD" / "pay X dollars" → `rail_payment` (fiat)
-  - "pay X USDC from solana" / "solana" → `bridge_payment`
-  - "pay X USDC on polygon" / "pay X USDC on arbitrum" → `create_payment_link` with that chain
-  - Everything else with USDC/crypto (including "pay X USDC", "send X USDC", "pay X$ in USDC") → `create_payment_link` with chain="polygon"
-- `chain`: extract from "on polygon" / "on arbitrum", default to "polygon" for crypto payments
+  - "pay X USDC" / "send X USDC" (no chain) → `rail_payment`
+  - "pay $X" / "pay X USD" → `rail_payment` (fiat)
+  - "pay X USDC on polygon/arbitrum" / "create payment link" → `create_payment_link`
+  - "pay X USDC from solana" → `bridge_payment`
+- `chain` (only for create_payment_link): extract from "on polygon" / "on arbitrum"
 
 If unparseable → output:
 ```
 UNRECOGNIZED
 Could not parse command.
-Supported: "pay 0.1 USDC", "pay $0.1", "pay 5 USDC on polygon", "pay 5 USDC on solana"
+Supported: "pay 0.1 USDC", "pay $0.1", "pay 5 USDC on polygon"
 ```
 
 ## STEP 2 — Generate Payment ID
@@ -44,8 +44,8 @@ Output this RIGHT NOW:
 ```
 PAYMENT QUEUED
 ID: <paymentId>
-Rail: Polygon Payment Link    ← if currency=crypto
-Rail: AgentCard Visa (fiat)   ← if currency=fiat
+Rail: Circle Gateway (USDC)    ← if currency=crypto
+Rail: AgentCard Visa (fiat)    ← if currency=fiat
 Status: Delegating to orchestrator...
 ```
 
@@ -53,22 +53,22 @@ Status: Delegating to orchestrator...
 
 Call sessions_spawn with target="orchestrator" and one of these JSON messages:
 
-### crypto payment (polygon payment link):
+### rail_payment + crypto (embed paymentId in service URL):
 ```json
-{"action":"create_payment_link","amount":<amount>,"token":"USDC","chain":"polygon","paymentId":"<paymentId>"}
+{"action":"rail_payment","rail":"nanopayment","currency":"crypto","amount":<amount>,"token":"USDC","chain":"arcTestnet","service_url":"http://localhost:3100/api/service/premium?paymentId=<paymentId>","paymentId":"<paymentId>"}
 ```
 
-### crypto payment (arbitrum payment link):
-```json
-{"action":"create_payment_link","amount":<amount>,"token":"USDC","chain":"arbitrum","paymentId":"<paymentId>"}
-```
-
-### fiat payment (AgentCard):
+### rail_payment + fiat:
 ```json
 {"action":"rail_payment","rail":"agent_card","currency":"fiat","amount":<amount>,"token":"USD","description":"Railclaw payment","paymentId":"<paymentId>"}
 ```
 
-### bridge_payment (solana):
+### create_payment_link:
+```json
+{"action":"create_payment_link","amount":<amount>,"token":"USDC","chain":"<chain>","paymentId":"<paymentId>"}
+```
+
+### bridge_payment:
 ```json
 {"action":"bridge_payment","amount":<amount>,"token":"USDC","source_chain":"solana","paymentId":"<paymentId>"}
 ```
