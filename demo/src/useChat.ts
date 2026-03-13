@@ -527,9 +527,10 @@ export function useChat(endpoint: string) {
               ref.agentText += chunk
             }
 
-            // Detect PAYMENT QUEUED pattern → start polling + notify owner
+            // Detect PAYMENT QUEUED pattern — wait for full block (Status: Delegating comes after Rail:)
             const payIdMatch = (ref.agentText).match(/ID:\s*(pay_\d+)/)
-            if (payIdMatch && !ref.toolShown.has('queued')) {
+            const delegating = ref.agentText.includes('Delegating to orchestrator')
+            if (payIdMatch && delegating && !ref.toolShown.has('queued')) {
               ref.toolShown.add('queued')
               const paymentId = payIdMatch[1]
               const queueId = uid()
@@ -545,11 +546,12 @@ export function useChat(endpoint: string) {
                 const amtNum      = ref.agentText.match(/(\d+(?:\.\d+)?)/)
                 const chainMatch  = ref.agentText.match(/on\s+(polygon|arbitrum|solana)/i)
                 const chainText   = chainMatch ? chainMatch[1].toLowerCase() : ''
-                const railKey     = railText.toLowerCase().includes('circle') || railText.toLowerCase().includes('usdc') && !chainText ? 'nanopayment'
-                                  : railText.toLowerCase().includes('agentcard') || railText.toLowerCase().includes('fiat') ? 'agent_card'
-                                  : railText.toLowerCase().includes('solana') || railText.toLowerCase().includes('bridge') ? 'bridge'
-                                  : 'payment_link'
-                const token       = railKey === 'agent_card' ? 'USD' : 'USDC'
+                const isAgentCard  = /agentcard|fiat|visa/i.test(railText)
+                const isNano       = /circle|gateway|usdc/i.test(railText) && !chainText && !isAgentCard
+                const isBridge     = /solana|bridge/i.test(railText)
+                const railKey      = isAgentCard ? 'agent_card' : isNano ? 'nanopayment' : isBridge ? 'bridge' : 'payment_link'
+                const token        = isAgentCard ? 'USD' : 'USDC'
+                const chain        = isAgentCard ? '' : chainText || (isNano ? 'arcTestnet' : 'polygon')
                 fetch('/api/notify', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -559,10 +561,10 @@ export function useChat(endpoint: string) {
                     message: `Payment requested: ${amtText || railText}`,
                     details: {
                       payment_id: paymentId,
-                      rail:       railText,
+                      method:     railText,
                       amount:     amtNum ? amtNum[1] : '',
                       token,
-                      chain:      chainText || (railKey === 'nanopayment' ? 'arcTestnet' : railKey === 'payment_link' ? 'polygon' : ''),
+                      chain,
                     },
                   }),
                 }).catch(() => {})

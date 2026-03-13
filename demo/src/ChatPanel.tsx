@@ -224,37 +224,50 @@ function NotificationCard({ msg }: { msg: Extract<Msg, { kind: 'notification' }>
              : msg.event === 'payment_confirmed' ? '🔒'
              : msg.event === 'link_created'      ? '🔗'
              : msg.rail  === 'bridge'            ? '🌉'
-             : msg.rail  === 'nanopayment'       ? '⚡'
-             : msg.rail  === 'agent_card'        ? '💳'
              : '💬'
-  const d = msg.details
-  const s = (k: string) => d[k] ? String(d[k]) : ''
+  const d    = msg.details
+  const s    = (k: string) => d[k] ? String(d[k]) : ''
   const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const chip = (label: string, val: string) => val ? <span className="notif-chip"><span className="notif-chip-label">{label}</span>{val}</span> : null
 
   const txHash = s('tx_hash') || s('transaction')
   const chain  = s('chain') || s('settlement_chain')
   const wallet = s('wallet') || s('recipient')
   const link   = s('link')
 
+  type Row = [string, string | JSX.Element]
+  const rows: Row[] = []
+
+  if (s('payment_id'))  rows.push(['Reference',      s('payment_id').replace('pay_', '#')])
+  if (s('amount'))      rows.push(['Amount',         `${s('amount')} ${s('token') || 'USDC'}`])
+  if (s('method') || s('rail')) rows.push(['Method', s('method') || s('rail')])
+  if (chain)            rows.push(['Network',        chain])
+  if (s('maskedPan'))   rows.push(['Card',           s('maskedPan')])
+  if (s('expiry'))      rows.push(['Expires',        s('expiry')])
+  if (s('chargeStatus'))rows.push(['Charge status',  s('chargeStatus')])
+  if (s('balance'))     rows.push(['Remaining bal',  s('balance')])
+  if (s('balanceBefore') && s('balanceAfter'))
+                        rows.push(['Gateway bal',    `${s('balanceBefore')} → ${s('balanceAfter')}`])
+  if (s('mode') && s('mode') !== 'live')
+                        rows.push(['Mode',           s('mode')])
+  if (wallet)           rows.push(['Recipient',      `${wallet.slice(0, 8)}…${wallet.slice(-4)}`])
+  if (link)             rows.push(['Payment link',   <a href={link} target="_blank" rel="noreferrer">{link.slice(0, 28)}…</a>])
+  if (txHash)           rows.push(['Tx hash',        `${txHash.slice(0, 14)}…`])
+
   return (
     <div className={`notif-card notif-${msg.event}`}>
-      <div className="notif-header">{icon} {msg.message}</div>
-      <div className="notif-rows">
-        {s('payment_id')   && chip('ID', s('payment_id').replace('pay_', '#'))}
-        {s('amount')       && chip('Amount', `${s('amount')} ${s('token') || 'USDC'}`)}
-        {chain             && chip('Chain', chain)}
-        {s('maskedPan')    && chip('Card', s('maskedPan'))}
-        {s('expiry')       && chip('Exp', s('expiry'))}
-        {s('chargeStatus') && chip('Status', s('chargeStatus'))}
-        {s('balance')      && chip('Remaining', s('balance'))}
-        {s('balanceBefore') && s('balanceAfter') && chip('Balance', `${s('balanceBefore')} → ${s('balanceAfter')}`)}
-        {s('mode') && s('mode') !== 'live' && chip('Mode', s('mode'))}
-        {wallet            && chip('Wallet', wallet.slice(0, 8) + '…' + wallet.slice(-4))}
-        {link              && <span className="notif-chip"><span className="notif-chip-label">Link</span><a href={link} target="_blank" rel="noreferrer">{link.slice(0, 30)}…</a></span>}
-        {txHash            && <span className="notif-chip"><span className="notif-chip-label">Tx</span>{txHash.slice(0, 12)}…</span>}
-        <span className="notif-chip notif-time">{time}</span>
-      </div>
+      <div className="notif-header">{icon} {msg.message} <span className="notif-time">{time}</span></div>
+      {rows.length > 0 && (
+        <table className="notif-table">
+          <tbody>
+            {rows.map(([label, val]) => (
+              <tr key={label}>
+                <td className="notif-label">{label}</td>
+                <td className="notif-val">{val}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
