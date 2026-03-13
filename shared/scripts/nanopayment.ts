@@ -54,14 +54,22 @@ try {
     await client.deposit('1');
   }
 
-  const { data, status } = await client.pay(url);
+  const { data, status, transaction, formattedAmount } = await client.pay(url);
 
   const updated = await client.getBalances();
   const balanceAfter = updated.gateway.formattedAvailable;
 
+  // Derive amount from balance diff if formattedAmount is empty (Circle Gateway quirk)
+  const paidBefore = balances.gateway.available;
+  const paidAfter  = updated.gateway.available;
+  const diffRaw    = paidBefore > paidAfter ? paidBefore - paidAfter : 0n;
+  const computedAmount = formattedAmount || (diffRaw > 0n ? (Number(diffRaw) / 1_000_000).toFixed(6).replace(/\.?0+$/, '') : '');
+
   const liveResult = {
     status: 'success', rail: 'nanopayment', mode: 'live',
     chain, service_url: url, http_status: status,
+    transaction: transaction || undefined,
+    amount: computedAmount,
     balanceBefore: `${balanceBefore} USDC`, balanceAfter: `${balanceAfter} USDC`, data,
   };
   console.log(JSON.stringify(liveResult));
