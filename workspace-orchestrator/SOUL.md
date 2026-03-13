@@ -15,9 +15,9 @@ Extract `paymentId` from the incoming message.
 
 ### If `rail = nanopayment`:
 Check `payment_rails.nanopayment.enabled` in BOUNDARY.md. If false → stop.
-If true → run (replace PAYMENT_ID with the paymentId from the message):
+If true → run (replace PAYMENT_ID with paymentId and SERVICE_URL with service_url from the message):
 ```bash
-cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "http://localhost:3100/api/service/premium" --chain "arcTestnet" --payment-id "PAYMENT_ID"
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "SERVICE_URL" --chain "arcTestnet" --payment-id "PAYMENT_ID"
 ```
 The script posts the result to the UI automatically. No curl needed.
 
