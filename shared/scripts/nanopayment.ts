@@ -14,22 +14,32 @@
 import { GatewayClient } from '@circle-fin/x402-batching/client';
 import { parseArgs } from './lib/config.js';
 
-const args = parseArgs(process.argv);
-const url   = args['url'] || 'http://localhost:3100/api/service/premium';
-const chain = (args['chain'] || 'arcTestnet') as 'arcTestnet' | 'base' | 'baseSepolia' | 'arbitrumSepolia';
+const args      = parseArgs(process.argv);
+const url       = args['url'] || 'http://localhost:3100/api/service/premium';
+const chain     = (args['chain'] || 'arcTestnet') as 'arcTestnet' | 'base' | 'baseSepolia' | 'arbitrumSepolia';
+const paymentId = args['payment-id'] || '';
+
+async function postCallback(result: object) {
+  if (!paymentId) return;
+  try {
+    await fetch('http://localhost:3100/api/payment-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId, result }),
+    });
+  } catch { /* best-effort */ }
+}
 
 const privateKey = process.env.CIRCLE_BUYER_PRIVATE_KEY as `0x${string}` | undefined;
 
 if (!privateKey) {
   // Simulation mode — no real payment
-  console.log(JSON.stringify({
-    status: 'success',
-    rail: 'nanopayment',
-    mode: 'simulation',
-    chain,
-    service_url: url,
-    note: 'CIRCLE_BUYER_PRIVATE_KEY not set — simulated payment only',
-  }));
+  const simResult = {
+    status: 'success', rail: 'nanopayment', mode: 'simulation',
+    chain, service_url: url, note: 'CIRCLE_BUYER_PRIVATE_KEY not set — simulated payment only',
+  };
+  console.log(JSON.stringify(simResult));
+  await postCallback(simResult);
   process.exit(0);
 }
 
@@ -49,19 +59,17 @@ try {
   const updated = await client.getBalances();
   const balanceAfter = updated.gateway.formattedAvailable;
 
-  console.log(JSON.stringify({
-    status: 'success',
-    rail: 'nanopayment',
-    mode: 'live',
-    chain,
-    service_url: url,
-    http_status: status,
-    balanceBefore: `${balanceBefore} USDC`,
-    balanceAfter:  `${balanceAfter} USDC`,
-    data,
-  }));
+  const liveResult = {
+    status: 'success', rail: 'nanopayment', mode: 'live',
+    chain, service_url: url, http_status: status,
+    balanceBefore: `${balanceBefore} USDC`, balanceAfter: `${balanceAfter} USDC`, data,
+  };
+  console.log(JSON.stringify(liveResult));
+  await postCallback(liveResult);
 } catch (err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
-  console.log(JSON.stringify({ status: 'error', error: msg }));
+  const errResult = { status: 'error', rail: 'nanopayment', error: msg };
+  console.log(JSON.stringify(errResult));
+  await postCallback(errResult);
   process.exit(1);
 }

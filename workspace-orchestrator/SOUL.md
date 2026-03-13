@@ -15,18 +15,19 @@ Extract `paymentId` from the incoming message.
 
 ### If `rail = nanopayment`:
 Check `payment_rails.nanopayment.enabled` in BOUNDARY.md. If false → stop.
-If true → run (use `service_url` from the message which already contains the paymentId):
+If true → run (replace PAYMENT_ID with the paymentId from the message):
 ```bash
-cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "SERVICE_URL" --chain "arcTestnet"
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "http://localhost:3100/api/service/premium" --chain "arcTestnet" --payment-id "PAYMENT_ID"
 ```
-The service URL already contains `?paymentId=...` so the callback is automatic. No curl needed after this.
+The script posts the result to the UI automatically. No curl needed.
 
 ### If `rail = agent_card`:
 Check `payment_rails.agent_card.enabled` in BOUNDARY.md. If false → stop.
-If true → run this single bash command (replace PAYMENT_ID and AMOUNT):
+If true → run (replace PAYMENT_ID and AMOUNT with values from the message):
 ```bash
-bash /home/ec2-user/payclaw/shared/scripts/run-payment.sh agent_card PAYMENT_ID AMOUNT
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx agent-card-payment.ts --amount AMOUNT --description "Railclaw payment" --payment-id "PAYMENT_ID"
 ```
+The script posts the result to the UI automatically. No curl needed.
 
 ### If `action = create_payment_link`:
 Read `wallet`, `business.name`, `business.id` from BOUNDARY.md. Check `chain` is in `allowed_chains`. Run:

@@ -21,7 +21,19 @@ const API_KEY  = process.env.AGENT_CARD_API_KEY || '';
 const args        = parseArgs(process.argv);
 const amount      = parseFloat(args['amount'] || '0.01');
 const description = args['description'] || 'Railclaw payment';
+const paymentId   = args['payment-id'] || '';
 const amountCents = Math.round(amount * 100);
+
+async function postCallback(result: object) {
+  if (!paymentId) return;
+  try {
+    await fetch('http://localhost:3100/api/payment-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId, result }),
+    });
+  } catch { /* best-effort */ }
+}
 
 if (!API_KEY) {
   console.log(JSON.stringify({
@@ -122,7 +134,7 @@ try {
   const balanceAfterCents = card.balanceCents - amountCents;
   const balance = `$${(balanceAfterCents / 100).toFixed(2)}`;
 
-  console.log(JSON.stringify({
+  const result = {
     status:       'success',
     rail:         'agent_card',
     mode:         API_KEY.startsWith('sk_test_') ? 'sandbox' : 'live',
@@ -135,10 +147,14 @@ try {
     description,
     cardId:       card.id,
     chargeStatus: 'approved',
-  }));
+  };
+  console.log(JSON.stringify(result));
+  await postCallback(result);
 
 } catch (err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
-  console.log(JSON.stringify({ status: 'error', error: msg }));
+  const errResult = { status: 'error', rail: 'agent_card', error: msg };
+  console.log(JSON.stringify(errResult));
+  await postCallback(errResult);
   process.exit(1);
 }
