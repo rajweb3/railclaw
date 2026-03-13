@@ -36,7 +36,7 @@ Example for "pay 5 USDC on polygon":
 sessions_spawn(target="orchestrator", message='{"action":"create_payment_link","amount":5,"token":"USDC","chain":"polygon","source":"business-product"}')
 ```
 
-Wait for the orchestrator result and proceed to Step 3.
+After `sessions_spawn` returns, the tool result contains the orchestrator's JSON output. **You MUST then output the formatted receipt text as your final response.** Never end the session without outputting the formatted receipt. The UI depends on your text output to display the receipt card.
 
 ## Step 3 — Format and Return the Result
 

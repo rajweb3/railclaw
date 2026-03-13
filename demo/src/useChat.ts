@@ -375,19 +375,49 @@ export function useChat(endpoint: string) {
             for (const out of output) {
               if (out.type === 'message') {
                 const txt = ((out.content as Array<Record<string, unknown>>)?.[0]?.text as string) ?? ''
+
+                // Try receipt patterns first (formatted text from product bot)
+                const receiptFromOutput = parsePaymentResult(txt, uid())
+                if (receiptFromOutput && !ref.agentText) {
+                  dispatch({ type: 'ADD_MSG', msg: receiptFromOutput })
+                  break
+                }
+
+                // Try JSON embedded in output text
                 const m = txt.match(/\{[\s\S]*\}/)
                 if (m) {
                   try {
                     const p = JSON.parse(m[0]) as Record<string, unknown>
-                    if (p.status === 'rail_payment') {
-                      dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'rail', rail: String(p.rail ?? ''), amount: p.amount ? String(p.amount) : undefined } })
-                      dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Payment complete', body: `rail: ${p.rail}`, active: false } })
+                    const scriptOut = (p.script_output ?? p) as Record<string, unknown>
+                    const rail = String(p.rail ?? scriptOut.rail ?? '')
+                    const amount = String(p.amount ?? scriptOut.amount ?? '')
+
+                    if (rail === 'nanopayment' || scriptOut.service_url) {
+                      dispatch({ type: 'ADD_MSG', msg: {
+                        id: uid(), kind: 'nano-receipt',
+                        chain:         String(scriptOut.chain ?? p.chain ?? 'arcTestnet'),
+                        serviceUrl:    String(scriptOut.service_url ?? 'demo service'),
+                        amount:        String(scriptOut.amount ?? amount ?? '0.01'),
+                        mode:          String(scriptOut.mode ?? 'simulation'),
+                        balanceBefore: scriptOut.balanceBefore ? String(scriptOut.balanceBefore) : undefined,
+                        balanceAfter:  scriptOut.balanceAfter  ? String(scriptOut.balanceAfter)  : undefined,
+                      }})
+                    } else if (rail === 'agent_card' || scriptOut.maskedPan) {
+                      dispatch({ type: 'ADD_MSG', msg: {
+                        id: uid(), kind: 'card-receipt',
+                        maskedPan:    String(scriptOut.maskedPan ?? '•••• •••• •••• ••••'),
+                        expiry:       String(scriptOut.expiry ?? 'N/A'),
+                        amount:       String(scriptOut.amount ?? amount),
+                        balance:      String(scriptOut.balance ?? 'N/A'),
+                        mode:         String(scriptOut.mode ?? 'live'),
+                        chargeStatus: scriptOut.chargeStatus ? String(scriptOut.chargeStatus) : undefined,
+                      }})
                     } else if (p.status === 'executed') {
                       dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Payment link created', body: String(p.payment_id ?? ''), active: false } })
                     } else if (p.status === 'bridge_payment') {
                       dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'done', icon: '✓', label: 'Bridge payment initiated', body: 'Monitoring Solana deposit...', active: false } })
                     } else if (p.status === 'rejected') {
-                      dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'step', stepKind: 'error', icon: '✖', label: `Rejected: ${p.violation}`, body: String(p.policy ?? ''), active: false } })
+                      dispatch({ type: 'ADD_MSG', msg: { id: uid(), kind: 'rejected', violation: String(p.violation ?? ''), policy: String(p.policy ?? ''), received: String(p.received ?? '') } })
                     }
                   } catch { /* text response */ }
                 }
