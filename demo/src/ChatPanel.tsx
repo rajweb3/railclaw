@@ -218,6 +218,31 @@ function BridgeReceipt({ msg }: { msg: Extract<Msg, { kind: 'bridge-receipt' }> 
   )
 }
 
+function NotificationCard({ msg }: { msg: Extract<Msg, { kind: 'notification' }> }) {
+  const icon = msg.rail === 'nanopayment' ? '⚡'
+             : msg.rail === 'agent_card'  ? '💳'
+             : msg.rail === 'bridge'      ? '🌉'
+             : '🔗'
+  const d = msg.details
+  const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    <div className="notif-card">
+      <div className="notif-header">{icon} {msg.message}</div>
+      <div className="notif-rows">
+        {d.amount   && <span className="notif-chip">{String(d.amount)} {String(d.token ?? 'USDC')}</span>}
+        {d.chain    && <span className="notif-chip">{String(d.chain)}</span>}
+        {d.settlement_chain && !d.chain && <span className="notif-chip">{String(d.settlement_chain)}</span>}
+        {d.balanceBefore && d.balanceAfter && (
+          <span className="notif-chip">Balance {String(d.balanceBefore)} → {String(d.balanceAfter)}</span>
+        )}
+        {d.maskedPan && <span className="notif-chip">{String(d.maskedPan)}</span>}
+        {d.tx_hash  && <span className="notif-chip">tx {String(d.tx_hash).slice(0, 10)}…</span>}
+        <span className="notif-chip notif-time">{time}</span>
+      </div>
+    </div>
+  )
+}
+
 function RejectedCard({ msg }: { msg: Extract<Msg, { kind: 'rejected' }> }) {
   return (
     <div className="receipt receipt-rejected">
@@ -356,6 +381,7 @@ export function ChatPanel({ side, title, subtitle, agentBadge, avatar, endpoint,
           if (msg.kind === 'card-receipt')   return <CardReceipt   key={msg.id} msg={msg} />
           if (msg.kind === 'link-receipt')   return <LinkReceipt   key={msg.id} msg={msg} />
           if (msg.kind === 'bridge-receipt') return <BridgeReceipt key={msg.id} msg={msg} />
+          if (msg.kind === 'notification')  return <NotificationCard key={msg.id} msg={msg} />
           if (msg.kind === 'rejected')       return <RejectedCard  key={msg.id} msg={msg} />
           return null
         })}

@@ -229,6 +229,36 @@ export function useChat(endpoint: string) {
     saveMessages(endpoint, state.messages)
   }, [endpoint, state.messages])
 
+  // ── Owner panel: poll for payment notifications ────────────────────────────
+  const notifSinceRef = useRef<string>('')
+  useEffect(() => {
+    if (!endpoint.includes('owner')) return
+    const timer = setInterval(async () => {
+      try {
+        const url = notifSinceRef.current
+          ? `/api/notifications?since=${encodeURIComponent(notifSinceRef.current)}`
+          : '/api/notifications'
+        const res  = await fetch(url)
+        const data = await res.json() as { notifications: Array<Record<string, unknown>> }
+        if (data.notifications?.length) {
+          notifSinceRef.current = data.notifications[data.notifications.length - 1].timestamp as string
+          for (const n of data.notifications) {
+            dispatch({ type: 'ADD_MSG', msg: {
+              id:        uid(),
+              kind:      'notification',
+              rail:      String(n.rail ?? ''),
+              event:     String(n.event ?? ''),
+              message:   String(n.message ?? ''),
+              timestamp: String(n.timestamp ?? new Date().toISOString()),
+              details:   (n.details ?? {}) as Record<string, unknown>,
+            }})
+          }
+        }
+      } catch { /* ignore network blips */ }
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [endpoint])
+
   // Track in-flight streaming IDs via ref (stable across renders)
   const streamRef = useRef({
     agentId:      null as string | null,
@@ -497,7 +527,7 @@ export function useChat(endpoint: string) {
               ref.agentText += chunk
             }
 
-            // Detect PAYMENT QUEUED pattern → start polling
+            // Detect PAYMENT QUEUED pattern → start polling + notify owner
             const payIdMatch = (ref.agentText).match(/ID:\s*(pay_\d+)/)
             if (payIdMatch && !ref.toolShown.has('queued')) {
               ref.toolShown.add('queued')
@@ -506,6 +536,26 @@ export function useChat(endpoint: string) {
               dispatch({ type: 'ADD_MSG', msg: { id: queueId, kind: 'step', stepKind: 'spawn', icon: '🔀', label: `Payment queued: ${paymentId}`, body: 'Orchestrator processing — polling for result...', active: true } })
               setStatus('working', '⏳ orchestrator executing...')
               startPolling(paymentId, queueId)
+              // Notify owner panel about the incoming request (only fires from product panel)
+              if (endpoint.includes('product')) {
+                const railMatch = ref.agentText.match(/Rail:\s*(.+)/)
+                const railText  = railMatch ? railMatch[1].trim() : 'unknown'
+                const amtMatch  = ref.agentText.match(/(\d+(?:\.\d+)?)\s*(?:USDC|\$|USD)/i)
+                const amtText   = amtMatch ? amtMatch[0].trim() : ''
+                const railKey   = railText.toLowerCase().includes('agentcard') ? 'agent_card'
+                                : railText.toLowerCase().includes('solana')    ? 'bridge'
+                                : 'payment_link'
+                fetch('/api/notify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    rail:    railKey,
+                    event:   'payment_queued',
+                    message: `New request: ${amtText || railText} [${paymentId}]`,
+                    details: { payment_id: paymentId, rail: railText },
+                  }),
+                }).catch(() => {})
+              }
             }
 
             // Heuristic: detect spawn/script from plain text stream

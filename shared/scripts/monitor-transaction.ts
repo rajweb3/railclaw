@@ -52,6 +52,21 @@ async function postCallback(result: object): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+async function postNotification(details: Record<string, unknown>): Promise<void> {
+  try {
+    await fetch('http://localhost:3100/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rail: 'payment_link',
+        event: 'payment_confirmed',
+        message: `Payment confirmed: ${details.amount ?? ''} ${details.token ?? 'USDC'} on ${details.chain ?? ''} (tx: ${String(details.tx_hash ?? '').slice(0, 10)}...)`,
+        details,
+      }),
+    });
+  } catch { /* best-effort */ }
+}
+
 const rpcUrl = config.rpc[chain];
 if (!rpcUrl) {
   console.log(JSON.stringify({ success: false, error: `No RPC configured for chain: ${chain}` }));
@@ -337,6 +352,15 @@ async function main() {
     }));
     await postCallback({
       rail: 'payment_link_confirmed',
+      payment_id: paymentId,
+      tx_hash: txHash,
+      chain,
+      token,
+      amount: String(amount),
+      confirmations: finalConfirmations,
+      confirmed_at: confirmedAt,
+    });
+    await postNotification({
       payment_id: paymentId,
       tx_hash: txHash,
       chain,

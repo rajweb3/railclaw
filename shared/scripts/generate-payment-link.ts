@@ -50,6 +50,21 @@ async function postCallback(result: object): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+async function postNotification(details: Record<string, unknown>): Promise<void> {
+  try {
+    await fetch('http://localhost:3100/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rail: 'payment_link',
+        event: 'link_created',
+        message: `Payment link created: ${details.amount ?? ''} ${details.token ?? 'USDC'} on ${details.chain ?? ''} — awaiting payment`,
+        details,
+      }),
+    });
+  } catch { /* best-effort */ }
+}
+
 const paymentId = externalPaymentId || generateId('pay');
 const now = new Date();
 const expiresAt = new Date(now.getTime() + config.payment.defaultExpiryHours * 60 * 60 * 1000);
@@ -91,7 +106,7 @@ console.log(
     expires_at: paymentRecord.expires_at,
   })
 );
-await postCallback({
+const callbackPayload = {
   rail: 'payment_link',
   success: true,
   payment_id: paymentId,
@@ -101,4 +116,6 @@ await postCallback({
   amount: String(paymentRecord.amount),
   wallet: paymentRecord.wallet,
   expires_at: paymentRecord.expires_at,
-});
+};
+await postCallback(callbackPayload);
+await postNotification(callbackPayload);

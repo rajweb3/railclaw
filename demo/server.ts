@@ -162,6 +162,46 @@ async function setupX402() {
 
 const paymentResults = new Map<string, Record<string, unknown>>();
 
+// ─── Business owner notification queue ────────────────────────────────────────
+//
+// Payment scripts POST here; owner panel polls every 5s.
+
+interface PaymentNotification {
+  id: string;
+  timestamp: string;
+  rail: string;
+  event: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+const notificationQueue: PaymentNotification[] = [];
+const MAX_NOTIFICATIONS = 100;
+
+app.post('/api/notify', (req: Request, res: Response) => {
+  const body = req.body as Partial<PaymentNotification>;
+  const notif: PaymentNotification = {
+    id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+    timestamp: new Date().toISOString(),
+    rail:    body.rail    ?? 'unknown',
+    event:   body.event   ?? 'payment',
+    message: body.message ?? '',
+    details: (body.details ?? {}) as Record<string, unknown>,
+  };
+  notificationQueue.push(notif);
+  if (notificationQueue.length > MAX_NOTIFICATIONS) notificationQueue.shift();
+  console.log(`  [notify] ${notif.rail} ${notif.event}: ${notif.message}`);
+  res.json({ ok: true });
+});
+
+app.get('/api/notifications', (req: Request, res: Response) => {
+  const since = req.query.since as string | undefined;
+  const result = since
+    ? notificationQueue.filter(n => n.timestamp > since)
+    : notificationQueue.slice(-20);
+  res.json({ notifications: result });
+});
+
 app.post('/api/payment-callback', (req: Request, res: Response) => {
   const { paymentId, result } = req.body as { paymentId?: string; result?: Record<string, unknown> };
   if (!paymentId || !result) { res.status(400).json({ error: 'paymentId and result required' }); return; }

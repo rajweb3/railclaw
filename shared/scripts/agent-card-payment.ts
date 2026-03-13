@@ -35,6 +35,21 @@ async function postCallback(result: object) {
   } catch { /* best-effort */ }
 }
 
+async function postNotification(details: Record<string, unknown>): Promise<void> {
+  try {
+    await fetch('http://localhost:3100/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rail: 'agent_card',
+        event: 'payment_received',
+        message: `Received $${details.amount ?? ''} USD via AgentCard (${details.maskedPan ?? ''})`,
+        details,
+      }),
+    });
+  } catch { /* best-effort */ }
+}
+
 if (!API_KEY) {
   console.log(JSON.stringify({
     status: 'error',
@@ -150,6 +165,7 @@ try {
   };
   console.log(JSON.stringify(result));
   await postCallback(result);
+  await postNotification({ ...result });
 
 } catch (err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);

@@ -537,6 +537,21 @@ async function main() {
     } catch { /* best-effort */ }
   }
 
+  async function postNotification(details: Record<string, unknown>): Promise<void> {
+    try {
+      await fetch('http://localhost:3100/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rail: 'bridge',
+          event: 'bridge_confirmed',
+          message: `Bridge confirmed: ${details.amount ?? ''} ${details.token ?? 'USDC'} Solana → ${details.settlement_chain ?? ''} (tx: ${String(details.tx_hash ?? '').slice(0, 10)}...)`,
+          details,
+        }),
+      });
+    } catch { /* best-effort */ }
+  }
+
   if (!paymentId || !settlementChain) {
     console.log(JSON.stringify({ success: false, error: 'Missing required arguments' }));
     process.exit(1);
@@ -678,6 +693,16 @@ async function main() {
 
   await postCallback({
     rail: 'bridge_confirmed',
+    payment_id: paymentId,
+    tx_hash: fillResult.txHash,
+    confirmations: fillResult.confirmations,
+    confirmed_at: confirmedAt,
+    source_chain: record.source_chain,
+    settlement_chain: record.settlement_chain,
+    token: record.token,
+    amount: String(record.amount),
+  });
+  await postNotification({
     payment_id: paymentId,
     tx_hash: fillResult.txHash,
     confirmations: fillResult.confirmations,

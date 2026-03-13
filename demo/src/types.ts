@@ -24,6 +24,10 @@ export type Msg =
       txHash?: string; confirmed?: boolean }
   | { id: string; kind: 'rejected';
       violation: string; policy: string; received: string }
+  | { id: string; kind: 'notification';
+      rail: string; event: string; message: string;
+      timestamp: string;
+      details: Record<string, unknown> }
 
 export type StatusState = 'idle' | 'thinking' | 'working' | 'done' | 'error'
 

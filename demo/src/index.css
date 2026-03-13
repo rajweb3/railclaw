@@ -619,3 +619,34 @@ header {
 }
 
 @keyframes blink { 50% { opacity: 0; } }
+
+/* ── Payment notifications (owner panel) ────────────────────────────────────── */
+.notif-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  max-width: 100%;
+}
+.notif-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.notif-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.notif-chip {
+  font-size: 10px;
+  background: var(--surface3, var(--surface));
+  color: var(--muted2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+}
+.notif-time { color: var(--muted); }
