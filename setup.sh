@@ -160,6 +160,9 @@ echo "  Product workspace → $PRODUCT_WS"
 ORCH_WS="$OPENCLAW_HOME/workspace-orchestrator"
 mkdir -p "$ORCH_WS/skills" "$ORCH_WS/memory"
 
+# Remove stale context files that conflict with SOUL.md
+rm -f "$ORCH_WS/AGENTS.md" "$ORCH_WS/TOOLS.md"
+
 ln -sf "$RAILCLAW_DIR/workspace-orchestrator/SOUL.md" "$ORCH_WS/SOUL.md"
 ln -sf "$RAILCLAW_DIR/workspace-orchestrator/IDENTITY.md" "$ORCH_WS/IDENTITY.md"
 ln -sf "$RAILCLAW_DIR/shared/BOUNDARY.md" "$ORCH_WS/BOUNDARY.md"
