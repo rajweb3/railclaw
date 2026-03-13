@@ -382,15 +382,18 @@ export function useChat(endpoint: string) {
 
           // ── completed ──────────────────────────────────────────────────────
           if (evType === 'response.completed' || evType === 'response.done') {
+            let receiptAdded = false
             if (ref.agentId) {
               dispatch({ type: 'FINISH_AGENT', id: ref.agentId })
               const receipt = parsePaymentResult(ref.agentText, uid())
-              if (receipt) dispatch({ type: 'ADD_MSG', msg: receipt })
+              if (receipt) { dispatch({ type: 'ADD_MSG', msg: receipt }); receiptAdded = true }
               ref.agentId = null; ref.agentText = ''
             }
             if (ref.spawnId)  { dispatch({ type: 'SETTLE_STEP',  id: ref.spawnId, body: 'complete' });  ref.spawnId  = null }
             if (ref.scriptId) { dispatch({ type: 'SETTLE_STEP',  id: ref.scriptId, body: 'complete' }); ref.scriptId = null }
 
+            // Only parse output array if no receipt was already added from streamed text
+            if (!receiptAdded) {
             const output = ((data?.response as Record<string, unknown>)?.output ?? []) as Array<Record<string, unknown>>
             for (const out of output) {
               if (out.type === 'message') {
@@ -398,7 +401,7 @@ export function useChat(endpoint: string) {
 
                 // Try receipt patterns first (formatted text from product bot)
                 const receiptFromOutput = parsePaymentResult(txt, uid())
-                if (receiptFromOutput && !ref.agentText) {
+                if (receiptFromOutput) {
                   dispatch({ type: 'ADD_MSG', msg: receiptFromOutput })
                   break
                 }
@@ -447,6 +450,7 @@ export function useChat(endpoint: string) {
                 }
               }
             }
+            } // end if (!receiptAdded)
             setStatus('done', '✓ done'); resetStatusLater()
           }
 
