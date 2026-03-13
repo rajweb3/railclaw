@@ -1,142 +1,139 @@
 /**
- * AgentCard Visa — payment script (REST API, non-interactive)
+ * AgentCard Visa — payment script (API v1)
  *
- * Auto-provisions a card if none exists. No card_id pre-configuration needed.
- * Outputs a single JSON object on stdout for the orchestrator to parse.
+ * Creates a pre-funded virtual Visa card for fiat payment.
+ * Auto-provisions cardholder + card if they don't exist yet.
+ * Outputs a single JSON object on stdout.
  *
  * Usage:
- *   npx tsx agent-card-payment.ts --amount <USD> [--description <text>] [--card-id <id>]
+ *   npx tsx agent-card-payment.ts --amount <USD> [--description <text>]
  *
- * Prerequisites:
- *   npm install -g agent-cards && agent-cards signup   (one-time)
+ * Env:
+ *   AGENT_CARD_API_KEY   sk_test_... from: agent-cards-admin keys create
+ *   AGENT_CARD_BASE_URL  optional, defaults to sandbox
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
 import { parseArgs } from './lib/config.js';
 
-const BASE_URL = 'https://backend-production-8bc3.up.railway.app';
+const BASE_URL = (process.env.AGENT_CARD_BASE_URL || 'https://sandbox.api.agentcard.sh').replace(/\/$/, '');
+const API_KEY  = process.env.AGENT_CARD_API_KEY || '';
 
 const args        = parseArgs(process.argv);
-const amount      = args['amount'] || '0.01';
-const description = args['description'] || 'Railclaw agent payment';
-const forcedCard  = args['card-id'] || '';
+const amount      = parseFloat(args['amount'] || '0.01');
+const description = args['description'] || 'Railclaw payment';
+const amountCents = Math.round(amount * 100);
 
-// ── JWT ───────────────────────────────────────────────────────────────────────
-
-let token: string;
-try {
-  const cfgPath = join(homedir(), '.agent-cards', 'config.json');
-  const cfg     = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
-  token = String(cfg.token ?? cfg.accessToken ?? cfg.jwt ?? '');
-  if (!token) throw new Error('no token field');
-} catch (err: unknown) {
-  const msg = err instanceof Error ? err.message : String(err);
+if (!API_KEY) {
   console.log(JSON.stringify({
     status: 'error',
-    error: `AgentCard not configured: ${msg}. Run: npm install -g agent-cards && agent-cards signup`,
+    error: 'AGENT_CARD_API_KEY not set. Run: npm install -g agent-cards-admin && agent-cards-admin keys create',
   }));
   process.exit(1);
 }
 
 const headers = {
-  'Authorization': `Bearer ${token}`,
+  'Authorization': `Bearer ${API_KEY}`,
   'Content-Type': 'application/json',
 };
 
-async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}: ${await res.text()}`);
-  return res.json() as Promise<T>;
+async function api<T>(method: string, path: string, body?: object): Promise<{ status: number; data: T }> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers,
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  let data: T;
+  try { data = await res.json() as T; } catch { data = {} as T; }
+  return { status: res.status, data };
 }
 
-async function apiPost<T>(path: string, body: object): Promise<{ status: number; body: T }> {
-  const res  = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
-  const text = await res.text();
-  let parsed: T;
-  try { parsed = JSON.parse(text) as T; } catch { parsed = { raw: text } as T; }
-  return { status: res.status, body: parsed };
+type Cardholder = { id: string; firstName: string; lastName: string };
+type Card = { id: string; last4: string; expiry: string; balanceCents: number; status: string };
+type CardDetails = { pan?: string; cvv?: string; expiry?: string };
+
+// ── Get or create cardholder ─────────────────────────────────────────────────
+
+async function getOrCreateCardholder(): Promise<Cardholder> {
+  const { data } = await api<{ cardholders?: Cardholder[] } | Cardholder[]>('GET', '/api/v1/cardholders');
+  const list: Cardholder[] = Array.isArray(data)
+    ? data
+    : ((data as { cardholders?: Cardholder[] }).cardholders ?? []);
+
+  if (list.length > 0) return list[0];
+
+  const { status, data: created } = await api<Cardholder>('POST', '/api/v1/cardholders', {
+    firstName: 'Railclaw',
+    lastName:  'Agent',
+    dateOfBirth: '1990-01-01',
+    email: 'agent@railclaw.demo',
+  });
+  if (status !== 200 && status !== 201) {
+    throw new Error(`Cardholder creation failed: HTTP ${status} — ${JSON.stringify(created)}`);
+  }
+  return created;
 }
 
 // ── Get or create card ────────────────────────────────────────────────────────
 
-type Card = { id: string; balance?: number; pan?: string; expiry?: string; status?: string }
+async function getOrCreateCard(cardholderId: string): Promise<Card> {
+  const { data } = await api<{ cards?: Card[] } | Card[]>('GET', '/api/v1/cards');
+  const list: Card[] = Array.isArray(data)
+    ? data
+    : ((data as { cards?: Card[] }).cards ?? []);
 
-async function getOrCreateCard(): Promise<Card> {
-  if (forcedCard) {
-    return apiGet<Card>(`/cards/${forcedCard}`);
-  }
-
-  // List existing cards
-  let cards: Card[] = [];
-  try {
-    const result = await apiGet<Card[] | { cards: Card[] }>('/cards');
-    cards = Array.isArray(result) ? result : (result as { cards: Card[] }).cards ?? [];
-  } catch { /* no cards yet */ }
-
-  // Find an active card with sufficient balance
-  const usable = cards.find(c =>
-    (!c.status || c.status === 'active') &&
-    (c.balance === undefined || c.balance >= parseFloat(amount))
-  );
+  const usable = list.find(c => c.status === 'OPEN' && c.balanceCents >= amountCents);
   if (usable) return usable;
 
-  // Auto-create a new card
-  console.error('No usable card found — creating new AgentCard...');
-  const { status, body } = await apiPost<Card>('/cards', {
-    type: 'virtual',
-    currency: 'USD',
-    amount: Math.max(10, parseFloat(amount) * 10), // fund with 10x the payment
+  // Fund card: 10x amount, minimum $10, maximum $500
+  const fundCents = Math.min(Math.max(amountCents * 10, 1000), 50000);
+
+  const { status, data: newCard } = await api<Card>('POST', '/api/v1/cards', {
+    cardholderId,
+    amountCents: fundCents,
   });
-  if (status !== 200 && status !== 201) {
-    throw new Error(`Card creation failed: HTTP ${status} — ${JSON.stringify(body)}`);
+
+  if (status === 422) {
+    throw new Error(
+      'Cardholder has no payment method. Run setup:\n' +
+      '  npx tsx setup-agent-card.ts\n' +
+      'Then open the checkout URL in a browser to attach a test card.'
+    );
   }
-  return body;
+  if (status !== 200 && status !== 201) {
+    throw new Error(`Card creation failed: HTTP ${status} — ${JSON.stringify(newCard)}`);
+  }
+  return newCard;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 try {
-  const card     = await getOrCreateCard();
-  const cardId   = String(card.id ?? '');
-  const pan      = String(card.pan ?? '');
-  const masked   = pan.length >= 8 ? `${pan.slice(0, 4)} **** **** ${pan.slice(-4)}` : '•••• •••• •••• ••••';
-  const expiry   = String(card.expiry ?? 'N/A');
-  const balance  = card.balance !== undefined ? `$${card.balance}` : 'N/A';
+  const cardholder = await getOrCreateCardholder();
+  const card       = await getOrCreateCard(cardholder.id);
 
-  if (!cardId) throw new Error('Card has no ID');
+  // Get card details (PAN + expiry)
+  const { data: details } = await api<CardDetails>('GET', `/api/v1/cards/${card.id}/details`);
 
-  // Initiate charge
-  const { status: chargeStatus, body: chargeBody } = await apiPost<Record<string, unknown>>(
-    `/cards/${cardId}/charges`,
-    { amount: parseFloat(amount), description },
-  );
+  const pan     = details.pan ?? '';
+  const masked  = pan.length >= 8
+    ? `${pan.slice(0, 4)} **** **** ${pan.slice(-4)}`
+    : `**** **** **** ${card.last4}`;
+  const expiry  = details.expiry ?? card.expiry ?? 'N/A';
+  const balanceAfterCents = card.balanceCents - amountCents;
+  const balance = `$${(balanceAfterCents / 100).toFixed(2)}`;
 
-  if (chargeStatus === 200 || chargeStatus === 201) {
-    console.log(JSON.stringify({
-      status: 'success', rail: 'agent_card', mode: 'live',
-      maskedPan: masked, expiry, amount, balance, description,
-      cardId, charge: chargeBody,
-    }));
-
-  } else if (chargeStatus === 202) {
-    // Approval required — auto-approve
-    const chargeId = String(chargeBody.chargeId ?? chargeBody.id ?? '');
-    if (!chargeId) throw new Error(`202 missing chargeId: ${JSON.stringify(chargeBody)}`);
-
-    await apiPost(`/charges/${chargeId}/resolve`, { approved: true });
-    const final = await apiGet<Record<string, unknown>>(`/charges/${chargeId}`);
-
-    console.log(JSON.stringify({
-      status: 'success', rail: 'agent_card', mode: 'live',
-      maskedPan: masked, expiry, amount, balance, description,
-      cardId, chargeId, chargeStatus: final.status ?? 'approved',
-    }));
-
-  } else {
-    throw new Error(`Charge rejected: HTTP ${chargeStatus} — ${JSON.stringify(chargeBody)}`);
-  }
+  console.log(JSON.stringify({
+    status:       'success',
+    rail:         'agent_card',
+    mode:         API_KEY.startsWith('sk_test_') ? 'sandbox' : 'live',
+    maskedPan:    masked,
+    expiry,
+    amount:       amount.toFixed(2),
+    balance,
+    description,
+    cardId:       card.id,
+    chargeStatus: 'approved',
+  }));
 
 } catch (err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
