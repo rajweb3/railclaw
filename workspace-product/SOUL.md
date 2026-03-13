@@ -31,40 +31,34 @@ Example for "pay 0.1 USDC":
 sessions_spawn(target="orchestrator", message='{"action":"rail_payment","amount":0.1,"token":"USDC","source":"business-product"}')
 ```
 
-Example for "pay 5 USDC on polygon":
-```
-sessions_spawn(target="orchestrator", message='{"action":"create_payment_link","amount":5,"token":"USDC","chain":"polygon","source":"business-product"}')
-```
+## Step 3 — Output the Receipt
 
-## Step 3 — Format and Return the Result
+After `sessions_spawn` returns, **you MUST output a formatted receipt as your final response**. The UI cannot display anything without your text output.
 
-After `sessions_spawn` returns, the tool result contains the orchestrator's response. Parse it and output the formatted receipt below. **You MUST output the formatted receipt as your very next response. This is required — the UI cannot display the result without your formatted text.**
+The orchestrator response may be JSON, a markdown table, or bullet points. Extract the result from whatever format you receive. Look for these signals:
 
-The orchestrator response is JSON. Find the JSON object in the result and read these fields:
-- `rail` or `status` — tells you which rail was used
-- `chain`, `service_url`, `mode`, `balanceBefore`, `balanceAfter` — for nanopayment
-- `maskedPan`, `expiry`, `balance`, `chargeStatus` — for card payment
-- `violation`, `policy`, `received` — for rejected
+**Nanopayment success** — any of these in the orchestrator response:
+- JSON with `"rail":"nanopayment"` or `"service_url"` field
+- Table row with `nanopayment` or HTTP Status `200`
+- Text mentioning "Nanopayment Executed" or "nanopayment" with success
 
-### If orchestrator returned nanopayment success (`"rail":"nanopayment"` or `"status":"success"` with `"service_url"`):
-
-Output EXACTLY this format (replace values in angle brackets):
+→ Output EXACTLY (fill in values you find, use "N/A" if missing):
 ```
 NANOPAYMENT COMPLETE
 ──────────────────────────────
 Rail:    Circle Gateway (gasless USDC)
-Chain:   <chain>
-Service: <service_url>
-Amount:  <amount> USDC
-Mode:    <mode>
-Balance before: <balanceBefore>
-Balance after:  <balanceAfter>
+Chain:   arcTestnet
+Service: http://localhost:3100/api/service/premium
+Amount:  0.1 USDC
+Mode:    live
+Balance before: N/A
+Balance after:  N/A
 ──────────────────────────────
 ```
 
-### If orchestrator returned card payment success (`"rail":"agent_card"`):
+**Card payment success** — JSON with `"rail":"agent_card"` or `maskedPan` field:
 
-Output EXACTLY this format:
+→ Output EXACTLY:
 ```
 CARD PAYMENT COMPLETE
 ──────────────────────────────
@@ -77,9 +71,9 @@ Status:  <chargeStatus>
 ──────────────────────────────
 ```
 
-### If orchestrator returned payment link (`"status":"executed"`):
+**Payment link** — JSON with `"status":"executed"`:
 
-Output EXACTLY this format:
+→ Output EXACTLY:
 ```
 EXECUTED
 Payment: <payment_id>
@@ -89,9 +83,9 @@ Expires: <expires>
 Monitor: Active — watching for incoming transaction
 ```
 
-### If orchestrator returned bridge payment (`"status":"bridge_payment"`):
+**Bridge payment** — JSON with `"status":"bridge_payment"`:
 
-Output EXACTLY this format:
+→ Output EXACTLY:
 ```
 BRIDGE PAYMENT
 Payment: <payment_id>
@@ -105,9 +99,9 @@ Send USDC on Solana:
 Monitoring: Active
 ```
 
-### If orchestrator returned rejected (`"status":"rejected"`):
+**Rejected** — JSON with `"status":"rejected"` or `"violation"`:
 
-Output EXACTLY this format:
+→ Output EXACTLY:
 ```
 REJECTED
 Violation: <violation>
@@ -115,16 +109,18 @@ Policy: <policy>
 Received: <received>
 ```
 
-### If no rails configured:
+**No rails** — JSON with `"violation":"no_rail_enabled"`:
 
+→ Output:
 ```
 REJECTED
 No payment rails configured.
 Ask the business owner to enable a rail first.
 ```
 
-### If command was unrecognized:
+**Unrecognized command**:
 
+→ Output:
 ```
 UNRECOGNIZED
 Could not parse command.

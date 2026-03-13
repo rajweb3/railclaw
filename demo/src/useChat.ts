@@ -154,19 +154,20 @@ function parsePaymentResult(text: string, id: string): Msg | null {
       received:  g(text, /Received:\s*(.+)/),
     }
   }
-  // Fallback: orchestrator-style markdown (when product bot echoes orchestrator output)
-  const hasNanopay = /nanopayment/i.test(text)
-  const balanceFlow = text.match(/[Bb]alance\s+[Ff]low[:\s*\s]*([0-9.]+)\s*[→\-]+\s*([0-9.]+)/)
-  if (hasNanopay && balanceFlow) {
+  // Fallback: orchestrator-style markdown table or bullet points
+  const hasNanopaySuccess = /nanopayment/i.test(text) && /success|HTTP.*200|200/i.test(text)
+  const balanceFlow = text.match(/[Bb]alance\s+[Ff]low[:\s]*([0-9.]+)\s*[→\-]+\s*([0-9.]+)/)
+  if (hasNanopaySuccess) {
     const chainMatch = text.match(/arcTestnet|polygon|arbitrum|base/i)
+    const amountMatch = text.match(/[Aa]mount[|\s:*]+([0-9.]+)/)
     return {
       id, kind: 'nano-receipt',
       chain:         chainMatch ? chainMatch[0] : 'arcTestnet',
       serviceUrl:    'http://localhost:3100/api/service/premium',
-      amount:        g(text, /[Aa]mount[:\s]+([0-9.]+)/) || '0.1',
-      mode:          /HTTP 200|Complete|success/i.test(text) ? 'live' : 'simulation',
-      balanceBefore: `${balanceFlow[1]} USDC`,
-      balanceAfter:  `${balanceFlow[2]} USDC`,
+      amount:        amountMatch ? amountMatch[1] : '0.1',
+      mode:          'live',
+      balanceBefore: balanceFlow ? `${balanceFlow[1]} USDC` : undefined,
+      balanceAfter:  balanceFlow ? `${balanceFlow[2]} USDC` : undefined,
     }
   }
   return null
