@@ -219,24 +219,40 @@ function BridgeReceipt({ msg }: { msg: Extract<Msg, { kind: 'bridge-receipt' }> 
 }
 
 function NotificationCard({ msg }: { msg: Extract<Msg, { kind: 'notification' }> }) {
-  const icon = msg.rail === 'nanopayment' ? '⚡'
-             : msg.rail === 'agent_card'  ? '💳'
-             : msg.rail === 'bridge'      ? '🌉'
-             : '🔗'
+  const icon = msg.event === 'payment_queued'    ? '📨'
+             : msg.event === 'payment_received'  ? '✅'
+             : msg.event === 'payment_confirmed' ? '🔒'
+             : msg.event === 'link_created'      ? '🔗'
+             : msg.rail  === 'bridge'            ? '🌉'
+             : msg.rail  === 'nanopayment'       ? '⚡'
+             : msg.rail  === 'agent_card'        ? '💳'
+             : '💬'
   const d = msg.details
+  const s = (k: string) => d[k] ? String(d[k]) : ''
   const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const chip = (label: string, val: string) => val ? <span className="notif-chip"><span className="notif-chip-label">{label}</span>{val}</span> : null
+
+  const txHash = s('tx_hash') || s('transaction')
+  const chain  = s('chain') || s('settlement_chain')
+  const wallet = s('wallet') || s('recipient')
+  const link   = s('link')
+
   return (
-    <div className="notif-card">
+    <div className={`notif-card notif-${msg.event}`}>
       <div className="notif-header">{icon} {msg.message}</div>
       <div className="notif-rows">
-        {d.amount   && <span className="notif-chip">{String(d.amount)} {String(d.token ?? 'USDC')}</span>}
-        {d.chain    && <span className="notif-chip">{String(d.chain)}</span>}
-        {d.settlement_chain && !d.chain && <span className="notif-chip">{String(d.settlement_chain)}</span>}
-        {d.balanceBefore && d.balanceAfter && (
-          <span className="notif-chip">Balance {String(d.balanceBefore)} → {String(d.balanceAfter)}</span>
-        )}
-        {d.maskedPan && <span className="notif-chip">{String(d.maskedPan)}</span>}
-        {d.tx_hash  && <span className="notif-chip">tx {String(d.tx_hash).slice(0, 10)}…</span>}
+        {s('payment_id')   && chip('ID', s('payment_id').replace('pay_', '#'))}
+        {s('amount')       && chip('Amount', `${s('amount')} ${s('token') || 'USDC'}`)}
+        {chain             && chip('Chain', chain)}
+        {s('maskedPan')    && chip('Card', s('maskedPan'))}
+        {s('expiry')       && chip('Exp', s('expiry'))}
+        {s('chargeStatus') && chip('Status', s('chargeStatus'))}
+        {s('balance')      && chip('Remaining', s('balance'))}
+        {s('balanceBefore') && s('balanceAfter') && chip('Balance', `${s('balanceBefore')} → ${s('balanceAfter')}`)}
+        {s('mode') && s('mode') !== 'live' && chip('Mode', s('mode'))}
+        {wallet            && chip('Wallet', wallet.slice(0, 8) + '…' + wallet.slice(-4))}
+        {link              && <span className="notif-chip"><span className="notif-chip-label">Link</span><a href={link} target="_blank" rel="noreferrer">{link.slice(0, 30)}…</a></span>}
+        {txHash            && <span className="notif-chip"><span className="notif-chip-label">Tx</span>{txHash.slice(0, 12)}…</span>}
         <span className="notif-chip notif-time">{time}</span>
       </div>
     </div>

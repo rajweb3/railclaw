@@ -538,21 +538,32 @@ export function useChat(endpoint: string) {
               startPolling(paymentId, queueId)
               // Notify owner panel about the incoming request (only fires from product panel)
               if (endpoint.includes('product')) {
-                const railMatch = ref.agentText.match(/Rail:\s*(.+)/)
-                const railText  = railMatch ? railMatch[1].trim() : 'unknown'
-                const amtMatch  = ref.agentText.match(/(\d+(?:\.\d+)?)\s*(?:USDC|\$|USD)/i)
-                const amtText   = amtMatch ? amtMatch[0].trim() : ''
-                const railKey   = railText.toLowerCase().includes('agentcard') ? 'agent_card'
-                                : railText.toLowerCase().includes('solana')    ? 'bridge'
-                                : 'payment_link'
+                const railMatch   = ref.agentText.match(/Rail:\s*(.+)/)
+                const railText    = railMatch ? railMatch[1].trim() : 'unknown'
+                const amtMatch    = ref.agentText.match(/(\d+(?:\.\d+)?)\s*(?:USDC|\$|USD)/i)
+                const amtText     = amtMatch ? amtMatch[0].trim() : ''
+                const amtNum      = ref.agentText.match(/(\d+(?:\.\d+)?)/)
+                const chainMatch  = ref.agentText.match(/on\s+(polygon|arbitrum|solana)/i)
+                const chainText   = chainMatch ? chainMatch[1].toLowerCase() : ''
+                const railKey     = railText.toLowerCase().includes('circle') || railText.toLowerCase().includes('usdc') && !chainText ? 'nanopayment'
+                                  : railText.toLowerCase().includes('agentcard') || railText.toLowerCase().includes('fiat') ? 'agent_card'
+                                  : railText.toLowerCase().includes('solana') || railText.toLowerCase().includes('bridge') ? 'bridge'
+                                  : 'payment_link'
+                const token       = railKey === 'agent_card' ? 'USD' : 'USDC'
                 fetch('/api/notify', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     rail:    railKey,
                     event:   'payment_queued',
-                    message: `New request: ${amtText || railText} [${paymentId}]`,
-                    details: { payment_id: paymentId, rail: railText },
+                    message: `Payment requested: ${amtText || railText}`,
+                    details: {
+                      payment_id: paymentId,
+                      rail:       railText,
+                      amount:     amtNum ? amtNum[1] : '',
+                      token,
+                      chain:      chainText || (railKey === 'nanopayment' ? 'arcTestnet' : railKey === 'payment_link' ? 'polygon' : ''),
+                    },
                   }),
                 }).catch(() => {})
               }

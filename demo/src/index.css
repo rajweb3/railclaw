@@ -648,5 +648,17 @@ header {
   border-radius: 4px;
   padding: 1px 6px;
   border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
-.notif-time { color: var(--muted); }
+.notif-chip-label {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+.notif-chip a { color: var(--accent, #3b82f6); text-decoration: none; }
+.notif-chip a:hover { text-decoration: underline; }
+.notif-time { color: var(--muted); margin-left: auto; }

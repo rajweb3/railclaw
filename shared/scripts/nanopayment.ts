@@ -30,6 +30,21 @@ async function postCallback(result: object) {
   } catch { /* best-effort */ }
 }
 
+async function postNotification(details: Record<string, unknown>): Promise<void> {
+  try {
+    await fetch('http://localhost:3100/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rail: 'nanopayment',
+        event: 'payment_received',
+        message: `Received ${details.amount ?? ''} USDC via Circle Gateway (${details.chain ?? chain})`,
+        details,
+      }),
+    });
+  } catch { /* best-effort */ }
+}
+
 const privateKey = process.env.CIRCLE_BUYER_PRIVATE_KEY as `0x${string}` | undefined;
 
 if (!privateKey) {
@@ -68,6 +83,7 @@ try {
   };
   console.log(JSON.stringify(liveResult));
   await postCallback(liveResult);
+  await postNotification({ ...liveResult });
 } catch (err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
   const errResult = { status: 'error', rail: 'nanopayment', error: msg };
