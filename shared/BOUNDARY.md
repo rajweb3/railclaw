@@ -1,7 +1,7 @@
 ---
-version: 0
-status: pending_onboarding
-updated_at: "2026-02-20T00:00:00Z"
+version: 11
+status: active
+updated_at: "2026-03-13T13:00:00Z"
 ---
 
 # Business Boundary Definition
@@ -10,17 +10,17 @@ updated_at: "2026-02-20T00:00:00Z"
 
 ## business
 ```yaml
-id: ""
-name: ""
-email: ""
-wallet: ""
-onboarded: false
+id: "biz_8f48a4c3"
+name: "pay-human"
+email: "raj@gmail.com"
+wallet: "0xA0Eb1765950Ef76008a2b5d9F68EC2eA5A8e7fC9"
+onboarded: true
 ```
 
 ## specification
 ```yaml
-allowed_chains: []
-allowed_tokens: []
+allowed_chains: [polygon, arbitrum]
+allowed_tokens: [USDC]
 inbound_only: true
 ```
 
@@ -40,21 +40,21 @@ blocked_regions: []
 
 ## cross_chain
 ```yaml
-user_payable_chains: []          # Chains users may originate payments from (e.g. [solana])
+user_payable_chains: [solana]
 bridge:
-  enabled: false                 # Set to true to allow bridged payments
-  provider: "across"             # Bridge provider (only "across" is supported)
-  settlement_chain: "polygon"    # Must be one of allowed_chains — where bridge funds settle
+  enabled: true
+  provider: "across"
+  settlement_chain: "polygon"
 ```
 
 ## payment_rails
 ```yaml
 agent_card:
-  enabled: false
-  card_id: ""                    # optional — auto-provisioned if blank
+  enabled: true
+  card_id: ""
 
 nanopayment:
-  enabled: false
-  chain: "arcTestnet"            # Circle Gateway chain: arcTestnet | base-sepolia | base
-  seller_address: ""             # Business EVM wallet to receive USDC via Circle Gateway
+  enabled: true
+  chain: "arcTestnet"
+  seller_address: "0xA0Eb1765950Ef76008a2b5d9F68EC2eA5A8e7fC9"
 ```
