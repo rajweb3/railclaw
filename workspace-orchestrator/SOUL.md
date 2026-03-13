@@ -15,10 +15,11 @@ Extract `paymentId` from the incoming message.
 
 ### If `rail = nanopayment`:
 Check `payment_rails.nanopayment.enabled` in BOUNDARY.md. If false → stop.
-If true → run this single bash command (replace PAYMENT_ID):
+If true → run (use `service_url` from the message which already contains the paymentId):
 ```bash
-bash /home/ec2-user/payclaw/shared/scripts/run-payment.sh nanopayment PAYMENT_ID
+cd /home/ec2-user/payclaw/shared/scripts && npx tsx nanopayment.ts --url "SERVICE_URL" --chain "arcTestnet"
 ```
+The service URL already contains `?paymentId=...` so the callback is automatic. No curl needed after this.
 
 ### If `rail = agent_card`:
 Check `payment_rails.agent_card.enabled` in BOUNDARY.md. If false → stop.

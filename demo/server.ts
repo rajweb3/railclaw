@@ -105,14 +105,22 @@ app.post('/api/chat/product', async (req: Request, res: Response) => {
 // demo but it has NO payment selection logic; it just receives and verifies.
 
 async function setupX402() {
+  // Helper: store nanopayment result keyed by paymentId (from ?paymentId= query param)
+  function storeNanopaymentResult(req: Request, extra: Record<string, unknown>) {
+    const paymentId = req.query.paymentId as string | undefined;
+    if (!paymentId) return;
+    const result = { rail: 'nanopayment', ...extra, timestamp: new Date().toISOString() };
+    paymentResults.set(paymentId, result);
+    setTimeout(() => paymentResults.delete(paymentId), 10 * 60 * 1000);
+    console.log(`  [x402] nanopayment result stored: ${paymentId}`);
+  }
+
   if (!SELLER_ADDRESS) {
-    // No seller address — mount an open endpoint for dev/sim mode
-    app.get('/api/service/premium', (_req: Request, res: Response) => {
-      res.json({
-        service: 'Premium AI Insights',
-        data: { insights: 'Exclusive market intelligence (sim mode)', timestamp: new Date().toISOString() },
-        note: 'Set CIRCLE_SELLER_ADDRESS in .env for live x402 payment verification',
-      });
+    // No seller address — open endpoint for dev/sim mode
+    app.get('/api/service/premium', (req: Request, res: Response) => {
+      const data = { insights: 'Exclusive market intelligence (sim mode)', timestamp: new Date().toISOString() };
+      storeNanopaymentResult(req, { service: 'Premium AI Insights', data, status: 'success' });
+      res.json({ service: 'Premium AI Insights', data, note: 'Set CIRCLE_SELLER_ADDRESS in .env for live x402 payment verification' });
     });
     console.log('  /api/service/premium → open (no seller address set)');
     return;
@@ -129,19 +137,20 @@ async function setupX402() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       gateway.require('$0.01') as any,
       (req: Request, res: Response) => {
-        res.json({
-          service: 'Premium AI Insights',
-          data: { insights: 'Exclusive market intelligence payload', sentiment: 'bullish', confidence: 0.94, timestamp: new Date().toISOString() },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          payer: (req as any).payment?.payer ?? 'unknown',
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const payer = (req as any).payment?.payer ?? 'unknown';
+        const data = { insights: 'Exclusive market intelligence payload', sentiment: 'bullish', confidence: 0.94, timestamp: new Date().toISOString() };
+        storeNanopaymentResult(req, { service: 'Premium AI Insights', data, payer, status: 'success' });
+        res.json({ service: 'Premium AI Insights', data, payer });
       }
     );
     console.log(`  /api/service/premium → x402 protected ($0.01 USDC → ${SELLER_ADDRESS})`);
   } catch (err) {
     console.warn('  Circle Gateway unavailable — open endpoint fallback:', (err as Error).message);
-    app.get('/api/service/premium', (_req: Request, res: Response) => {
-      res.json({ service: 'Premium AI Insights', data: { insights: 'Sim mode', timestamp: new Date().toISOString() } });
+    app.get('/api/service/premium', (req: Request, res: Response) => {
+      const data = { insights: 'Sim mode', timestamp: new Date().toISOString() };
+      storeNanopaymentResult(req, { service: 'Premium AI Insights', data, status: 'success' });
+      res.json({ service: 'Premium AI Insights', data });
     });
   }
 }

@@ -53,9 +53,9 @@ Status: Delegating to orchestrator...
 
 Call sessions_spawn with target="orchestrator" and one of these JSON messages:
 
-### rail_payment + crypto:
+### rail_payment + crypto (embed paymentId in service URL):
 ```json
-{"action":"rail_payment","rail":"nanopayment","currency":"crypto","amount":<amount>,"token":"USDC","chain":"arcTestnet","service_url":"http://localhost:3100/api/service/premium","paymentId":"<paymentId>"}
+{"action":"rail_payment","rail":"nanopayment","currency":"crypto","amount":<amount>,"token":"USDC","chain":"arcTestnet","service_url":"http://localhost:3100/api/service/premium?paymentId=<paymentId>","paymentId":"<paymentId>"}
 ```
 
 ### rail_payment + fiat:
