@@ -231,8 +231,18 @@ export function useChat(endpoint: string) {
 
   // ── Owner panel: poll for payment notifications ────────────────────────────
   const notifSinceRef = useRef<string>('')
+  const unreadRef     = useRef(0)
   useEffect(() => {
     if (!endpoint.includes('owner')) return
+
+    function onVisible() {
+      if (!document.hidden) {
+        unreadRef.current = 0
+        document.title = 'Railclaw'
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     const timer = setInterval(async () => {
       try {
         const url = notifSinceRef.current
@@ -253,10 +263,17 @@ export function useChat(endpoint: string) {
               details:   (n.details ?? {}) as Record<string, unknown>,
             }})
           }
+          if (document.hidden) {
+            unreadRef.current += data.notifications.length
+            document.title = `(${unreadRef.current}) Railclaw`
+          }
         }
       } catch { /* ignore network blips */ }
     }, 5000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [endpoint])
 
   // Track in-flight streaming IDs via ref (stable across renders)
